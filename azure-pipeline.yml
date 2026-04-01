@@ -1,0 +1,135 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+ 
+ 
+pool:
+  name: dds-concourse-ubuntu2004-01
+parameters:
+  - name: Operation
+    type: string
+    default: 'List'
+    values:
+    - List
+    - Set
+    - Delete
+    - Recover
+    - MultipleKeys
+ 
+  - name: Environment
+    type: string
+    default: 'DEV'
+    values:
+    - 'DEV'
+    - 'QA'
+    - 'INT'
+    - 'UAT'
+    - 'PERF'
+    - 'STAGE'
+    - 'PROD'
+ 
+  - name: SecretName
+    type: string
+    default: 'add Key for "SET" operation'
+  - name: SecretValue
+    type: string
+    default: 'add Value for "SET" operation'
+ 
+variables:
+  - group: ${{ parameters.ENVIRONMENT }}
+  - name: operation
+    value: ${{ parameters.Operation }}
+  - ${{ if eq(parameters.operation, 'set') }}:
+    - name: SecretName
+      value: ${{ parameters.SecretName }}
+    - name: SecretValue
+      value: ${{ parameters.SecretValue }}
+  - ${{ if eq(parameters.operation, 'Delete') }}:
+    - name: SecretName
+      value: ${{ parameters.SecretName }}
+  - ${{ if eq(parameters.operation, 'Recover') }}:
+    - name: SecretName
+      value: ${{ parameters.SecretName }}
+ 
+trigger: none
+ 
+stages:
+- ${{ if eq(parameters.operation, 'List') }}:
+  - stage: List
+    jobs:
+    - job: List
+      steps:
+      - task: AzureCLI@2
+        displayName: List Keyvault
+        inputs:
+          azureSubscription: $(serviceConnection)
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: 'az Keyvault secret List --vault-name $(keyvaultName) -o table'
+ 
+- ${{ if eq(parameters.operation, 'Set') }}:
+  - stage: Set
+    jobs:
+    - job: Set
+      steps:
+      - task: AzureCLI@2
+        displayName: Set Keyvault
+        inputs:
+          azureSubscription: $(serviceConnection)
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: az Keyvault secret set --vault-name $(keyvaultName) --name $(SecretName) --value "$(SecretValue)"
+        env:
+          SecretValue: $(SecretValue)
+ 
+- ${{ if eq(parameters.operation, 'Delete') }}:
+  - stage: Delete
+    jobs:
+    - job: Delete
+      condition: eq(variables.operation,'Delete')
+      steps:
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: $(serviceConnection)
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: az Keyvault secret Delete --vault-name $(keyvaultName) --name $(SecretName)
+ 
+- ${{ if eq(parameters.operation, 'Recover') }}:
+  - stage: Recover
+    jobs:
+    - job: Recover
+      steps:
+      - task: AzureCLI@2
+        displayName: Recover Keyvault
+        inputs:
+          azureSubscription: $(serviceConnection)
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: az keyvault secret recover --vault-name $(keyvaultName) --name $(SecretName) 
+ 
+- ${{ if eq(parameters.operation, 'MultipleKeys') }}:
+  - stage: MultipleKeys
+    jobs:
+    - job: MultipleKeys
+      steps:
+      - task: AzureCLI@2
+        continueOnError: true
+        displayName: Set multi keys
+        inputs:
+          azureSubscription: $(serviceConnection)
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            declare -a arraykey=("$(KEY1)" "$(KEY2)" "$(KEY3)" "$(KEY4)" "$(KEY5)" "$(KEY6)" "$(KEY7)" "$(KEY8)" "$(KEY9)")
+            declare -a arraysecret=("$(secret1)" "$(secret2)" "$(secret3)" "$(secret4)" "$(secret5)" "$(secret6)" "$(secret7)" "$(secret8)" "$(secret9)")
+            arraylength=${#arraykey[@]}
+            for (( i=0; i<${arraylength}; i++ ));
+            do
+            #  echo "key: ${arraykey[$i]} , value: ${arraysecret[$i]}"
+              az keyvault secret set --vault-name $(keyvaultName) --name "${arraykey[$i]}"  --value "${arraysecret[$i]}"
+            done
+        env:
+          SecretValue: $(SecretValue)
+ 
