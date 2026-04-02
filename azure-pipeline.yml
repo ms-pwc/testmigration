@@ -63,7 +63,7 @@ stages:
       - task: AzureCLI@2
         displayName: List Keyvault
         inputs:
-          azureSubscription: gittesting
+          azureSubscription: 'gittesting'
           scriptType: 'bash'
           scriptLocation: 'inlineScript'
           inlineScript: 'az Keyvault secret List --vault-name $(keyvaultName) -o table'
