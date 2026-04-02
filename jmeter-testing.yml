@@ -1,0 +1,60 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+ 
+trigger:
+- none
+variables:
+  venv: $(System.DefaultWorkingDirectory)\venv
+ 
+jobs:
+- job: myJob
+  timeoutInMinutes: 1200
+  pool:
+    name: 'infradevops-vmss-test-windows'
+  # strategy:
+  #   matrix:
+  #     Python:
+  #       python.version: '3.7.0'
+  #       platform: 'x64'
+  #       addToPath: true
+ 
+  steps:
+  - powershell: |
+        dir C:\JMeter\apache-jmeter-5.4.3\bin
+        $destination = 'C:\apache-jmeter-5.4.3.zip'
+        $targetPath = 'C:\JMeter'
+        $JMeterPath = '\apache-jmeter-5.4.3\bin'
+        $fullPath = join-path -Path $targetPath -ChildPath $JMeterPath
+        Write-Host "Adding JMeter to PATH"
+        $Env:PATH += $fullPath + ";"
+        refreshenv
+        jmeter -n -t CI_CD_pipeline_intergation\CI_CD_critical_flows_API_WD.jmx -l api_report.jtl
+        python scripts\jtl_junit_converter.py api_report.jtl Junit.xml
+        Write-Output $Env:PATH
+        $Env:PATH
+ 
+ 
+ 
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: $(Pipeline.Workspace)\s\Junit.xml
+      mergeTestResults: false
+      failTaskOnFailedTests: false
+      #testRunTitle: 'Test run title'
+    condition: succeededOrFailed()
+    displayName: 'Publish result'
+    timeoutInMinutes: 2
+ 
+ 
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: $(Pipeline.Workspace)\s\Junit.xml
+      artifact: 'Jmeter-report.zip'
+      publishLocation: 'pipeline'
+    condition: succeededOrFailed()
+    displayName: 'Publish test artifact'
+ 
+ 
