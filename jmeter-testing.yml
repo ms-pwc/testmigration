@@ -12,7 +12,7 @@ jobs:
 - job: myJob
   timeoutInMinutes: 1200
   pool:
-    name: 'infradevops-vmss-test-windows'
+    name: 'Azure Pipelines'
   # strategy:
   #   matrix:
   #     Python:
