@@ -5,7 +5,7 @@
  
  
 pool:
-  name: dds-concourse-ubuntu2004-01
+  name: Azure Pipelines
 parameters:
   - name: Operation
     type: string
