@@ -12,7 +12,7 @@ jobs:
 - job: myJob
   timeoutInMinutes: 1200
   pool:
-    name: 'Azure Pipelines'
+    vmImage: 'windows-latest'
   strategy:
     matrix:
       Python:
