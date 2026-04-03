@@ -13,27 +13,35 @@ jobs:
   timeoutInMinutes: 1200
   pool:
     name: 'Azure Pipelines'
-  # strategy:
-  #   matrix:
-  #     Python:
-  #       python.version: '3.7.0'
-  #       platform: 'x64'
-  #       addToPath: true
+  strategy:
+    matrix:
+      Python:
+        python.version: '3.7.0'
+        platform: 'x64'
+        addToPath: true
  
   steps:
   - powershell: |
-        dir C:\JMeter\apache-jmeter-5.4.3\bin
-        $destination = 'C:\apache-jmeter-5.4.3.zip'
-        $targetPath = 'C:\JMeter'
-        $JMeterPath = '\apache-jmeter-5.4.3\bin'
-        $fullPath = join-path -Path $targetPath -ChildPath $JMeterPath
-        Write-Host "Adding JMeter to PATH"
-        $Env:PATH += $fullPath + ";"
-        refreshenv
-        jmeter -n -t CI_CD_pipeline_intergation\CI_CD_critical_flows_API_WD.jmx -l api_report.jtl
-        python scripts\jtl_junit_converter.py api_report.jtl Junit.xml
-        Write-Output $Env:PATH
-        $Env:PATH
+      Invoke-WebRequest https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.4.3.zip -OutFile jmeter.zip
+      Expand-Archive jmeter.zip C:\JMeter
+
+      dir C:\JMeter\apache-jmeter-5.4.3\bin
+
+      $destination = 'C:\apache-jmeter-5.4.3.zip'
+      $targetPath = 'C:\JMeter'
+      $JMeterPath = '\apache-jmeter-5.4.3\bin'
+      $fullPath = Join-Path -Path $targetPath -ChildPath $JMeterPath
+
+      Write-Host "Adding JMeter to PATH"
+      $Env:PATH += $fullPath + ";"
+
+      refreshenv
+
+      & C:\JMeter\apache-jmeter-5.4.3\bin\jmeter.bat -n -t CI_CD_pipeline_intergation\CI_CD_critical_flows_API_WD.jmx -l api_report.jtl
+      python scripts\jtl_junit_converter.py api_report.jtl Junit.xml
+
+      Write-Output $Env:PATH
+      $Env:PATH
  
  
  
