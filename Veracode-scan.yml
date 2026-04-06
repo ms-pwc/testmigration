@@ -2,8 +2,8 @@ pool:
   vmImage: ubuntu-latest
  
 schedules:
-- cron: "5 9 * * *"
-  displayName: Daily 14:35 IST test build
+- cron: "36 9 * * *"
+  displayName: Daily 15:06 IST test build
   branches:
     include:
     - main 
@@ -92,7 +92,7 @@ jobs:
   - task: CreateWorkItem@2
     inputs:
       teamProject: 'testmigration'
-      workItemType: 'Bug'
+      workItemType: 'Issue'
       title: 'ConcourseSearch Veracode Backend Scan Pipeline Failing'
       assignedTo: '$(Build.RequestedForId)'
       areaPath: 'testmigration'
