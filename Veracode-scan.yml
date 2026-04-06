@@ -6,7 +6,7 @@ schedules:
   displayName: Daily midnight build
   branches:
     include:
-    - develop 
+    - main 
   always: true
 parameters:
 - name: GITREPO
@@ -15,14 +15,14 @@ parameters:
   - Search-API
 - name: BRANCH_NAME
   type: string
-  default: develop
+  default: main
   displayName: 'Branch to scan'
  
 resources:
   repositories:
   - repository: Search-API
     type: git
-    name: ConcourseSearch/Search-API
+    name: testmigration/Search-API
     ref: refs/heads/${{ parameters.BRANCH_NAME }}
 jobs: 
 - job: stepList
@@ -87,20 +87,14 @@ jobs:
       maximumWaitTime: '360'
   - task: CreateWorkItem@1
     inputs:
-      teamProject: 'Concourse Platform'
+      teamProject: 'testmigration'
       workItemType: 'Bug'
       title: 'ConcourseSearch Veracode Backend Scan Pipeline Failing'
       assignedTo: '$(Build.RequestedForId)'
-      areaPath: 'Concourse Platform\Delivery\Autobots Crew\Concourse AI'
-      iterationPath: 'Concourse AI@currentIteration'
+      areaPath: 'testmigration'
+      iterationPath: 'testmigration@currentIteration'
       fieldMappings: |
         Severity=3 - Medium
-        Cause=Build
-        Defect How Found=Automated
-        Environment Found In=1 - QA
-        Defect Root Cause=Build
         Repro Steps=This work item was automatically created because Veracode Backend Scan pipeline failing
-        System Info=https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:11045:1268054:28977035:28947643:28963293:::
-        Concourse_RootCauseAnalysis=https://dev.azure.com/pwc-us-adv-digital/concourseRecommendationEngine/_build/results?buildId=$(Build.BuildID)&view=results
         Tags=Build $(Build.BuildNumber)
     condition: failed()
