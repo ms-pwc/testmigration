@@ -1,0 +1,13 @@
+{
+  "name": "dummy-datasource",
+  "type": "azureblob",
+  "credentials": {
+    "connectionString": "DefaultEndpointsProtocol=https;AccountName=mystorageDev;AccountKey=REPLACE_WITH_YOUR_STORAGE_KEY;EndpointSuffix=core.windows.net"
+  },
+  "container": {
+    "name": "search-data",
+    "query": null
+  },
+  "dataChangeDetectionPolicy": null,
+  "dataDeletionDetectionPolicy": null
+}
