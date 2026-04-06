@@ -14,3 +14,6 @@ These updates were made for the GitHub Actions workflow `JMETER-TESTING`.
 
 ## Testing Note
 Dummy Python and test files were created using Copilot to validate the Python and JMeter XML conversion flow.
+
+## GitHub Actions YAML Testing Link
+https://github.com/ms-pwc/adomg-test/actions/workflows/jmeter-testing.yml
