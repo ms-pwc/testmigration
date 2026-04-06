@@ -2,8 +2,8 @@ pool:
   vmImage: ubuntu-latest
  
 schedules:
-- cron: "0 0 * * *"
-  displayName: Daily midnight build
+- cron: "5 9 * * *"
+  displayName: Daily 14:35 IST test build
   branches:
     include:
     - main 
