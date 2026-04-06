@@ -66,7 +66,7 @@ stages:
                 "api-key" = $SearchApi
                 "Content-Type" = "application/json"
               }
-              $url = "https://$SearchService.search.windows.net/datasources/" + $SearchDataSource + "?api-version=2024-03…
+              $url = "https://$SearchService.search.windows.net/datasources/" + $SearchDataSource + "?api-version=2024-03-01-Preview"
  
               Write-Host ${{ parameters.DataSource }}
               Write-Host $url
@@ -99,7 +99,7 @@ stages:
                 "api-key" = $SearchApi
                 "Content-Type" = "application/json"
               }
-              $url = "https://$SearchService.search.windows.net/indexes/" + $SearchIndex + "?api-version=2024-03-01-Previ…
+              $url = "https://$SearchService.search.windows.net/indexes/" + $SearchIndex + "?api-version=2024-03-01-Preview"
               Write-Host ${{ parameters.SearchIndex }}
               Write-Host $url
               Invoke-RestMethod -Uri $url -Headers $headers -Method PUT -Body $indexDefinition | ConvertTo-Json
@@ -131,7 +131,7 @@ stages:
                 "api-key" = $SearchApi
                 "Content-Type" = "application/json"
               }
-              $url = "https://$SearchService.search.windows.net/indexers/" + $SearchIndexer + "?api-version=2024-03-01-Pr…
+              $url = "https://$SearchService.search.windows.net/indexers/" + $SearchIndexer + "?api-version=2024-03-01-Preview"
               Write-Host ${{ parameters.SearchIndexer }}
               Write-Host $url
               Invoke-RestMethod -Uri $url -Headers $headers -Method PUT -Body $SearchIndexerDefinition | ConvertTo-Json
