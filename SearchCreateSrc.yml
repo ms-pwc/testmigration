@@ -1,3 +1,4 @@
+trigger: none
 parameters:
   - name: ENVIRONMENT
     type: string
