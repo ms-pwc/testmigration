@@ -1,0 +1,138 @@
+parameters:
+  - name: ENVIRONMENT
+    type: string
+    default: dev
+    values:
+      - dev
+      - qa
+      - stage
+      - prod
+      - emeaStage
+      - emeaProd
+      - apacStage
+      - apacProd
+  - name: azuresubscription
+    type: string
+    default: testSvc
+    values:
+      - testSvc
+      - concoursesearch-dev-connection
+      - concoursesearch-qa-connection
+      - concoursesearch-stage-connection
+      - concoursesearch-prod-connection
+      - concoursearch-emea-stage-connection
+      - concoursearch-emea-prod-connection
+      - concoursearch-apac-stage-connection
+      - concoursearch-apac-prod-connection
+  - name: DataSource
+    type: string
+    default: ""
+  - name: SearchIndex
+    type: string
+    default: ""
+  - name: SearchIndexer
+    type: string
+    default: ""
+ 
+variables:
+  - name: Azure_Subscription
+    value: ${{ parameters.azuresubscription }}
+  - group: search-${{ parameters.ENVIRONMENT }}
+ 
+stages:
+- stage: DataSource
+  displayName: "Configure DataSource"
+  dependsOn: []
+  jobs:
+  - job: DataSource
+    displayName: "Configure DataSource"
+    steps:
+      - task: AzurePowerShell@5
+        displayName: "Configure DataSource"
+        inputs:
+          azureSubscription: "$(Azure_Subscription)"
+          ScriptType: InlineScript
+          Inline: |
+            $SearchApi = "$(SearchApi)"
+            $SearchService = "$(SearchService)"
+            $SearchDataSource = "${{ parameters.DataSource }}"
+            Set-Location $env:BUILD_SOURCESDIRECTORY
+            Get-ChildItem "data_source" -Filter *.json |
+            ForEach-Object {
+              $DataSourceDefinition = Get-Content -Raw -Path "data_source/$SearchDataSource.json"
+              Write-Host $DataSourceDefinition
+              $headers = @{
+                "api-key" = $SearchApi
+                "Content-Type" = "application/json"
+              }
+              $url = "https://$SearchService.search.windows.net/datasources/" + $SearchDataSource + "?api-version=2024-03…
+ 
+              Write-Host ${{ parameters.DataSource }}
+              Write-Host $url
+              Invoke-RestMethod -Uri $url -Headers $headers -Method PUT -Body $DataSourceDefinition | ConvertTo-Json
+            }
+          azurePowerShellVersion: LatestVersion
+ 
+- stage: SearchIndex
+  dependsOn: []
+  displayName: "Configure SearchIndex"
+  jobs:
+  - job: SearchIndex
+    displayName: "Configure SearchIndex"
+    steps:
+      - task: AzurePowerShell@5
+        displayName: "Configure SearchIndex"
+        inputs:
+          azureSubscription: "$(Azure_Subscription)"
+          ScriptType: InlineScript
+          Inline: |
+            $SearchApi = "$(SearchApi)"
+            $SearchService = "$(SearchService)"
+            $SearchIndex = "${{ parameters.SearchIndex }}"
+            Set-Location $env:BUILD_SOURCESDIRECTORY
+            Get-ChildItem "indexes" -Filter *.json |
+            ForEach-Object {
+              $indexDefinition = Get-Content -Raw -Path "indexes/$SearchIndex.json"
+              Write-Host $indexDefinition
+              $headers = @{
+                "api-key" = $SearchApi
+                "Content-Type" = "application/json"
+              }
+              $url = "https://$SearchService.search.windows.net/indexes/" + $SearchIndex + "?api-version=2024-03-01-Previ…
+              Write-Host ${{ parameters.SearchIndex }}
+              Write-Host $url
+              Invoke-RestMethod -Uri $url -Headers $headers -Method PUT -Body $indexDefinition | ConvertTo-Json
+            }
+          azurePowerShellVersion: LatestVersion
+ 
+- stage: SearchIndexer
+  dependsOn: []
+  displayName: "Configure SearchIndexer"
+  jobs:
+  - job: SearchIndexer
+    displayName: "Configure SearchIndexer"
+    steps:
+      - task: AzurePowerShell@5
+        displayName: "Configure SearchIndexer"
+        inputs:
+          azureSubscription: "$(Azure_Subscription)"
+          ScriptType: InlineScript
+          Inline: |
+            $SearchApi = "$(SearchApi)"
+            $SearchService = "$(SearchService)"
+            $SearchIndexer = "${{ parameters.SearchIndexer }}"
+            Set-Location $env:BUILD_SOURCESDIRECTORY
+            Get-ChildItem "indexers" -Filter *.json |
+            ForEach-Object {
+              $SearchIndexerDefinition = Get-Content -Raw -Path "indexers/$SearchIndexer.json"
+              Write-Host $SearchIndexerDefinition
+              $headers = @{
+                "api-key" = $SearchApi
+                "Content-Type" = "application/json"
+              }
+              $url = "https://$SearchService.search.windows.net/indexers/" + $SearchIndexer + "?api-version=2024-03-01-Pr…
+              Write-Host ${{ parameters.SearchIndexer }}
+              Write-Host $url
+              Invoke-RestMethod -Uri $url -Headers $headers -Method PUT -Body $SearchIndexerDefinition | ConvertTo-Json
+            }
+          azurePowerShellVersion: LatestVersion
