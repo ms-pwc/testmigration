@@ -1,0 +1,84 @@
+pool:
+  name: Azure Pipelines
+parameters:
+  - name: Operation
+    type: string
+    default: List
+    values:
+      - List
+      - Set
+      - Delete
+      - Show
+  - name: AZURESUB
+    type: string
+    default: testSvc
+    values:
+      - testSvc
+      - concoursesearch-dev-connection
+      - concoursesearch-predev-connection
+      - concoursesearch-qa-connection
+      - concoursesearch-stage-connection
+      - concoursesearch-prod-connection
+      - concoursearch-apac-stage-connection
+      - concoursearch-apac-prod-connection
+      - concoursearch-emea-stage-connection
+      - concoursearch-emea-prod-connection
+  - name: KeyVault
+    type: string
+    default: test-keyvault-git-001
+    values:
+      - test-keyvault-git-001
+      - pzi-gxu2-n-kv-zoknd-d003
+      - pzi-gxu2-n-kv-zoknd-d005
+      - pzi-gxu2-n-kv-zoknd-d004
+      - pzi-gxu2-g-kv-zoknd-s001
+      - pzi-gxu2-p-kv-zoknd-p001
+      - pzi-gxwe-g-kv-zeeqq-s001
+      - pzi-gxse-g-kv-jhmhv-s001
+      - pzi-gxse-p-kv-jhmhv-p001
+      - pzi-gxwe-p-kv-zeeqq-p001
+  - name: SecretName
+    default: ''
+  - name: SecretValue
+    type: string
+    default: ''
+
+variables:
+  - name: operation
+    value: ${{ parameters.Operation }}
+  - name: azureSub
+    value: ${{ parameters.AZURESUB }}
+  - name: keyVault
+    value: ${{ parameters.KeyVault }}
+  - name: secretName
+    value: ${{ parameters.SecretName }}
+  - name: secretValue
+    value: ${{ parameters.SecretValue }}
+
+trigger: none
+
+stages:
+  - stage: KeyVaultTasks
+    displayName: 'Key Vault Tasks'
+    jobs:
+      - job: KeyVaultOperation
+        displayName: '${{ variables.operation }} Secret'
+        steps:
+          - task: AzureCLI@2
+            displayName: '${{ variables.operation }} Secret in Key Vault'
+            inputs:
+              azureSubscription: $(azureSub)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                if [ "${{ variables.operation }}" == "Set" ]; then
+                  az keyvault secret set --vault-name $(keyVault) --name $(secretName) --value $(secretValue)
+                elif [ "${{ variables.operation }}" == "Show" ]; then
+                  az keyvault secret show --vault-name $(keyVault) --name $(secretName) --query 'value' --output tsv
+                elif [ "${{ variables.operation }}" == "Delete" ]; then
+                  az keyvault secret delete --vault-name $(keyVault) --name $(secretName)
+                else
+                  az keyvault secret list --vault-name $(keyVault) --output table
+                fi
+            env:
+              SecretValue: $(secretValue)
