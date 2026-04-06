@@ -1,4 +1,3 @@
-trigger: none
 pool:
   vmImage: ubuntu-latest
  
@@ -97,7 +96,7 @@ jobs:
       title: 'ConcourseSearch Veracode Backend Scan Pipeline Failing'
       assignedTo: '$(Build.RequestedForId)'
       areaPath: 'testmigration'
-      iterationPath: 'testmigration@currentIteration'
+      iterationPath: 'testmigration'
       fieldMappings: |
         Severity=3 - Medium
         Repro Steps=This work item was automatically created because Veracode Backend Scan pipeline failing
