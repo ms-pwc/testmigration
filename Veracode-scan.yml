@@ -73,19 +73,23 @@ jobs:
         archiveType: 'zip'
         archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
         replaceExistingArchive: true
-  - task: Veracode@3
-    inputs:
-      ConnectionDetailsSelection: 'Endpoint'
-      AnalysisService: 'veracode-connection'
-      veracodeAppProfile: 'USA-ADV-Concourse-Search'
-      version: '$(Build.BuildId)'
-      filepath: '$(build.artifactstagingdirectory)'
-      sandboxName: 'Python Dailyscan'
-      createSandBox: true
-      importResults: true
-      failBuildOnPolicyFail: false
-      maximumWaitTime: '360'
-  - task: CreateWorkItem@1
+  # - task: Veracode@3
+  #   inputs:
+  #     ConnectionDetailsSelection: 'Endpoint'
+  #     AnalysisService: 'veracode-connection'
+  #     veracodeAppProfile: 'USA-ADV-Concourse-Search'
+  #     version: '$(Build.BuildId)'
+  #     filepath: '$(build.artifactstagingdirectory)'
+  #     sandboxName: 'Python Dailyscan'
+  #     createSandBox: true
+  #     importResults: true
+  #     failBuildOnPolicyFail: false
+  #     maximumWaitTime: '360'
+  - script: |
+      echo "Intentional failure for test validation"
+      exit 1
+    displayName: 'Intentional failure for work item validation'
+  - task: CreateWorkItem@2
     inputs:
       teamProject: 'testmigration'
       workItemType: 'Bug'
