@@ -1,4 +1,3 @@
-trigger: none
 parameters:
   - name: ENVIRONMENT
     type: string
@@ -14,9 +13,8 @@ parameters:
       - apacProd
   - name: azuresubscription
     type: string
-    default: testSvc
+    default: concoursesearch-dev-connection
     values:
-      - testSvc
       - concoursesearch-dev-connection
       - concoursesearch-qa-connection
       - concoursesearch-stage-connection
