@@ -1,5 +1,5 @@
-pool:
-  name: Azure Pipelines
+pool: dds-concourse-ubuntu2004-01
+
 parameters:
   - name: Operation
     type: string
@@ -11,9 +11,8 @@ parameters:
       - Show
   - name: AZURESUB
     type: string
-    default: testSvc
+    default: concoursesearch-dev-connection
     values:
-      - testSvc
       - concoursesearch-dev-connection
       - concoursesearch-predev-connection
       - concoursesearch-qa-connection
@@ -25,9 +24,8 @@ parameters:
       - concoursearch-emea-prod-connection
   - name: KeyVault
     type: string
-    default: test-keyvault-git-001
+    default: pzi-gxu2-n-kv-zoknd-d003
     values:
-      - test-keyvault-git-001
       - pzi-gxu2-n-kv-zoknd-d003
       - pzi-gxu2-n-kv-zoknd-d005
       - pzi-gxu2-n-kv-zoknd-d004
