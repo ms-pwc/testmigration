@@ -1,11 +1,5 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
- 
- 
 pool:
-  name: Azure Pipelines
+  name: dds-concourse-ubuntu2004-01
 parameters:
   - name: Operation
     type: string
@@ -63,7 +57,7 @@ stages:
       - task: AzureCLI@2
         displayName: List Keyvault
         inputs:
-          azureSubscription: $(serviceconnection)
+          azureSubscription: $(serviceConnection)
           scriptType: 'bash'
           scriptLocation: 'inlineScript'
           inlineScript: 'az Keyvault secret List --vault-name $(keyvaultName) -o table'
@@ -76,7 +70,7 @@ stages:
       - task: AzureCLI@2
         displayName: Set Keyvault
         inputs:
-          azureSubscription: $(serviceconnection)
+          azureSubscription: $(serviceConnection)
           scriptType: 'bash'
           scriptLocation: 'inlineScript'
           inlineScript: az Keyvault secret set --vault-name $(keyvaultName) --name $(SecretName) --value "$(SecretValue)"
@@ -91,7 +85,7 @@ stages:
       steps:
       - task: AzureCLI@2
         inputs:
-          azureSubscription: $(serviceconnection)
+          azureSubscription: $(serviceConnection)
           scriptType: 'bash'
           scriptLocation: 'inlineScript'
           inlineScript: az Keyvault secret Delete --vault-name $(keyvaultName) --name $(SecretName)
@@ -104,7 +98,7 @@ stages:
       - task: AzureCLI@2
         displayName: Recover Keyvault
         inputs:
-          azureSubscription: $(serviceconnection)
+          azureSubscription: $(serviceConnection)
           scriptType: 'bash'
           scriptLocation: 'inlineScript'
           inlineScript: az keyvault secret recover --vault-name $(keyvaultName) --name $(SecretName) 
@@ -118,7 +112,7 @@ stages:
         continueOnError: true
         displayName: Set multi keys
         inputs:
-          azureSubscription: $(serviceconnection)
+          azureSubscription: $(serviceConnection)
           scriptType: 'bash'
           scriptLocation: 'inlineScript'
           inlineScript: |
