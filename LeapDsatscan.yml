@@ -1,0 +1,97 @@
+# File: scan-netsparker.yaml
+trigger: none
+ 
+pool:
+  name: 'dds-concourse-ubuntu2004-01'
+  workspace:
+    clean: all
+ 
+parameters:
+- name: ENVIRONMENT
+  displayName: ENVIRONMENT
+  type: string
+  default: DEV
+  values:
+    - DEV
+    - QA
+    - STAGE
+ 
+variables:
+- group: ${{ parameters.ENVIRONMENT }}
+- name: 'ENVIRONMENT'
+  value: ${{ parameters.ENVIRONMENT }}
+ 
+stages:
+- ${{ if eq(parameters.ENVIRONMENT, 'DEV') }}:
+  - stage: DastScanDEV
+    jobs:
+    - job: Scan
+      steps:
+      - task: netsparker-cloud@1
+        inputs:
+          apiConnection: '$(NETSPARKER_ENDPOINT)'
+          scanTypes: '0'
+          scanWebSites: '$(NETSPARKER_PROFILE_ID)'
+          scanWebSitesProfile: '$(NETSPARKER_WEBSITE_ID)'
+          buildFail: true
+          severity: 'Critical'
+          hasReport: true
+          reportType: 'ScanDetail'
+          onlyConfirmedIssues: true
+          onlyUnconfirmedIssues: true
+          isConfirmed: true
+          ignoreFalsePositive: true
+          ignoreRiskAccepted: true
+          stopScan: true
+ 
+- ${{ if eq(parameters.ENVIRONMENT, 'QA') }}:
+  - stage: DastScanQA
+    jobs:
+    - job: Scan
+      steps:
+      - task: netsparker-cloud@1
+        inputs:
+          apiConnection: '$(NETSPARKER_ENDPOINT)'
+          scanTypes: '0'
+          scanWebSites: '$(NETSPARKER_PROFILE_ID)'
+          scanWebSitesProfile: '$(NETSPARKER_WEBSITE_ID)'
+          buildFail: true
+          severity: 'Critical'
+          hasReport: true
+          reportType: 'ScanDetail'
+          onlyConfirmedIssues: true
+          onlyUnconfirmedIssues: true
+          isConfirmed: true
+          ignoreFalsePositive: true
+          ignoreRiskAccepted: true
+          stopScan: true
+ 
+- ${{ if eq(parameters.ENVIRONMENT, 'Stage') }}:
+  - stage: DastScanStage
+    jobs:
+    - job: Scan
+      steps:
+      - task: netsparker-cloud@1
+        inputs:
+          apiConnection: '$(NETSPARKER_ENDPOINT)'
+          scanTypes: '0'
+          scanWebSites: '$(NETSPARKER_PROFILE_ID)'
+          scanWebSitesProfile: '$(NETSPARKER_WEBSITE_ID)'
+          buildFail: true
+          severity: 'Critical'
+          hasReport: true
+          reportType: 'ScanDetail'
+          onlyConfirmedIssues: true
+          onlyUnconfirmedIssues: true
+          isConfirmed: true
+          ignoreFalsePositive: true
+          ignoreRiskAccepted: true
+          stopScan: true
+schedules:
+- cron: "0 22 * * *"
+  displayName: Daily DAST Scan
+  branches:
+    include:
+    - main
+  always: true
+ 
