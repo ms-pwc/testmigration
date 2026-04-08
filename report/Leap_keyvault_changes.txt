@@ -1,0 +1,53 @@
+Leap KeyVault - Changes Required
+Updated: 2026-04-08
+
+1. OIDC login is missing in the first task/job (similar issue seen in Search Create Src earlier). Add Azure Login (OIDC) before running CLI operations in the first job. Other jobs already have it.
+
+2. Load Variable Groups step is missing and must be added (same working pattern used in Search Create Src after fixes). Add this step:
+- name: Load Variable Groups
+  id: load_variable_groups
+  shell: bash
+  env:
+    KEY_VAULT_NAME: kayvault1
+  run: >-
+    python3 - <<'PYEOF'
+
+    import yaml, os, json, subprocess
+
+    with open('.github/variables/global.yaml') as f:
+        all_groups = yaml.safe_load(f) or {}
+    groups_to_load = [k for k in all_groups if str(k).endswith(f"::search-{os.environ.get('INPUT_ENVIRONMENT','dev')}")]
+
+    kv = os.environ.get('KEY_VAULT_NAME', '').strip()
+
+    with open(os.environ['GITHUB_ENV'], 'a') as env_file:
+        for g in groups_to_load:
+            # Direct lookup with qualified key (Project::GroupName)
+            group_vars = all_groups.get(g, {})
+            if not group_vars:
+                print(f'Warning: Variable group {g} not found in global.yaml')
+                continue
+            for k, v in group_vars.items():
+                if k.startswith('#'): continue
+                if str(v) == '[SECRET-FROM-KEYVAULT]':
+                    if not kv: continue
+                    r = subprocess.run(['az', 'keyvault', 'secret', 'show',
+                        '--vault-name', kv, '--name', k.replace('_', '-'),
+                        '--query', 'value', '-o', 'tsv'], capture_output=True, text=True)
+                    if r.returncode == 0:
+                        val = r.stdout.strip()
+                        print('::add-mask::' + val)
+                        env_file.write(k + '=' + val + chr(10))
+                else:
+                    env_file.write(k + '=' + str(v) + chr(10))
+    PYEOF
+
+3. IMP: In delete job, operation selection currently uses two if conditions. Keep correct operation condition logic; otherwise whole pipeline YAML syntax/behavior becomes wrong. This condition handling is mandatory.
+
+4. Apply condition at job level, not only on a single task step. Use job-level condition format like:
+if: ${{ inputs.operation == 'Delete' }}
+This ensures only selected jobs run and non-selected jobs are skipped. If condition stays on only one task, all jobs still trigger.
+
+5. In Set Keyvault/multiKeys job, env setup is repeated again and is not required again. Remove duplicate env setup to avoid confusion and mismatch. - No issue if kept has it is
+
+6. IMP: Values are case-sensitive. Use exact key names in all CLI tasks and parameters (for example keyvault, secret name/value, secret1, key1, and other identifiers). Do not switch casing (no unintended uppercase variants).

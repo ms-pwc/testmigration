@@ -1,0 +1,117 @@
+DDS Concourse keyVAULT Workflow - Changes Made for Successful Run
+===========================================================
+
+POINT 1: Fix Task Name and Variables/Operation
+====================================================
+
+Current Issue in test.yml:
+- Task name uses: name: ${{ variables.operation }} Secret
+- This references undefined 'variables.operation' - GitHub has no 'variables.' context in this way.
+- Variables defined in env block use wrong casing: OPERATION, KEYVAULT, SECRETNAME, SECRETVALUE
+
+Change Required:
+- Replace task name to: name: "${{ inputs.Operation || 'List' }} Secret"
+- Use inputs directly in the condition, not env variables
+- Keep references consistent: inputs.Operation, inputs.KeyVault, inputs.SecretName, inputs.SecretValue
+- Remove env variables block that defines operation, azureSub, keyVault, secretName, secretValue
+
+Working Pattern:
+  name: "${{ inputs.Operation || 'List' }} Secret"
+  env:
+    KEYVAULT_NAME: "${{ inputs.KeyVault || 'test-keyvault-git-001' }}"
+    SECRET_NAME: "${{ inputs.SecretName || '' }}"
+    SECRET_VALUE: "${{ inputs.SecretValue || '' }}"
+    OPERATION: "${{ inputs.Operation || 'List' }}"
+
+====================================================
+POINT 2: Add Azure Login Task (Missing Step)
+====================================================
+
+Current Issue in test.yml:
+- No azure/login@v2 step present before the keyvault operation step
+- This means no Azure authentication happens, so all keyvault commands will fail
+
+Add After Step: "Checkout code"
+
+  - name: Resolve Azure credentials from selected service connection
+    id: resolve_azure
+    shell: bash
+    run: |
+      case "${{ inputs.AZURESUB || 'concoursesearch-dev-connection' }}" in
+        "concoursesearch-dev-connection")
+          echo "client_id=${{ vars.AZURE_CLIENT_ID_CONCOURSESEARCH_DEV_CONNECTION }}" >> "$GITHUB_OUTPUT"
+          echo "tenant_id=${{ vars.AZURE_TENANT_ID_CONCOURSESEARCH_DEV_CONNECTION }}" >> "$GITHUB_OUTPUT"
+          echo "subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID_CONCOURSESEARCH_DEV_CONNECTION }}" >> "$GITHUB_OUTPUT"
+          ;;
+        [additional cases for other subscriptions...]
+      esac
+
+  - name: Azure Login (OIDC)
+    uses: azure/login@v2
+    with:
+      client-id: "${{ steps.resolve_azure.outputs.client_id }}"
+      tenant-id: "${{ steps.resolve_azure.outputs.tenant_id }}"
+      subscription-id: "${{ steps.resolve_azure.outputs.subscription_id }}"
+
+====================================================
+POINT 3: Map Selected Subscription to Correct Credentials
+====================================================
+
+Current Issue
+- No mapping exists between selected AZURESUB input and Azure OIDC credentials
+- All 9 service connections (dev, predev, qa, stage, prod, apac-stage, apac-prod, emea-stage, emea-prod) need separate credential lookups
+
+Change Required:
+- Add "Resolve Azure credentials from selected service connection" step BEFORE azure/login step
+- This step must include a case statement mapping each AZURESUB input value to its corresponding client-id, tenant-id, and subscription-id variables
+- Each credential value must be stored as a separate GitHub repository variable (examples below)
+
+Variables Required (must be created in GitHub repository settings):
+- For each connection, create 3 variables:
+  AZURE_CLIENT_ID_CONCOURSESEARCH_DEV_CONNECTION
+  AZURE_TENANT_ID_CONCOURSESEARCH_DEV_CONNECTION
+  AZURE_SUBSCRIPTION_ID_CONCOURSESEARCH_DEV_CONNECTION
+  [Repeat for all 9 connections with appropriate suffixes]
+
+- AZURE_CLIENT_ID_CONCOURSESEARCH_PREDEV_CONNECTION
+- AZURE_TENANT_ID_CONCOURSESEARCH_PREDEV_CONNECTION
+- AZURE_SUBSCRIPTION_ID_CONCOURSESEARCH_PREDEV_CONNECTION
+
+- AZURE_CLIENT_ID_CONCOURSESEARCH_QA_CONNECTION
+- AZURE_TENANT_ID_CONCOURSESEARCH_QA_CONNECTION
+- AZURE_SUBSCRIPTION_ID_CONCOURSESEARCH_QA_CONNECTION
+
+- AZURE_CLIENT_ID_CONCOURSESEARCH_STAGE_CONNECTION
+- AZURE_TENANT_ID_CONCOURSESEARCH_STAGE_CONNECTION
+- AZURE_SUBSCRIPTION_ID_CONCOURSESEARCH_STAGE_CONNECTION
+
+- AZURE_CLIENT_ID_CONCOURSESEARCH_PROD_CONNECTION
+- AZURE_TENANT_ID_CONCOURSESEARCH_PROD_CONNECTION
+- AZURE_SUBSCRIPTION_ID_CONCOURSESEARCH_PROD_CONNECTION
+
+- AZURE_CLIENT_ID_CONCOURSEARCH_APAC_STAGE_CONNECTION
+- AZURE_TENANT_ID_CONCOURSEARCH_APAC_STAGE_CONNECTION
+- AZURE_SUBSCRIPTION_ID_CONCOURSEARCH_APAC_STAGE_CONNECTION
+
+- AZURE_CLIENT_ID_CONCOURSEARCH_APAC_PROD_CONNECTION
+- AZURE_TENANT_ID_CONCOURSEARCH_APAC_PROD_CONNECTION
+- AZURE_SUBSCRIPTION_ID_CONCOURSEARCH_APAC_PROD_CONNECTION
+
+- AZURE_CLIENT_ID_CONCOURSEARCH_EMEA_STAGE_CONNECTION
+- AZURE_TENANT_ID_CONCOURSEARCH_EMEA_STAGE_CONNECTION
+- AZURE_SUBSCRIPTION_ID_CONCOURSEARCH_EMEA_STAGE_CONNECTION
+
+- AZURE_CLIENT_ID_CONCOURSEARCH_EMEA_PROD_CONNECTION
+- AZURE_TENANT_ID_CONCOURSEARCH_EMEA_PROD_CONNECTION
+- AZURE_SUBSCRIPTION_ID_CONCOURSEARCH_EMEA_PROD_CONNECTION
+
+====================================================
+Summary of Migration Steps
+====================================================
+
+1. Fix task name and variables - use inputs directly instead of undefined variables/env references
+2. Add Resolve Azure credentials step - map selected subscription to OIDC credentials
+3. Add Azure Login step - authenticate using resolved credentials before keyvault operations
+4. Update keyvault operation step - use corrected env variables from step 1 and verified authentication from step 3
+
+After these 3 changes, test.yml will work the same as previous
