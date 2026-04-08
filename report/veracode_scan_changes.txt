@@ -1,0 +1,49 @@
+Veracode Scan - Changes Made to Run Pipeline
+Updated: 2026-04-07
+
+1. Add GitHub PAT to checkout step for different repository: use 'token: ${{ secrets.GITHUB_PAT }}' in checkout action to access ConcourseSearch/Search-API repo.
+
+2. Remove duplicate checkout of Search-API: the step "Checkout repository Search-API" and the unnamed checkout with 'repository: Search-API path: s/Search-API' are doing the same thing, keep only one with correct path.
+
+3. Replace CreateWorkItem@1 placeholder with proper ADO work item REST API call using curl with Basic auth (base64 encoded PAT), JSON patch payload for bug creation, and field paths for System.Title, System.AreaPath, System.IterationPath, System.Tags, System.Description, Microsoft.VSTS.Common.Severity, and Custom fields. Reference code:
+ example: 
+  - name: 'Create ADO Work Item on Veracode Scan Failure'
+    run: |
+      ORG="${{ env.ADO_ORG }}"
+      PROJECT="Concourse Platform"
+      PAT="${{ secrets.ADO_PAT }}"
+      ASSIGNED_TO="${{ env.ADO_ASSIGNED_TO }}"
+      RUN_NUMBER="${{ github.run_number }}"
+      RUN_ID="${{ github.run_id }}"
+      REPO="${{ github.repository }}"
+
+      AUTH=$(echo -n ":${PAT}" | base64)
+
+      JSON_PAYLOAD=$(cat <<'EOF'
+      [
+        {"op": "add", "path": "/fields/System.Title", "value": "ConcourseSearch Veracode Backend Scan Pipeline Failing"},
+        {"op": "add", "path": "/fields/System.AreaPath", "value": "Concourse Platform\\Delivery\\Autobots Crew\\Concourse AI"},
+        {"op": "add", "path": "/fields/System.IterationPath", "value": "Concourse Platform\\Concourse AI@currentIteration"},
+        {"op": "add", "path": "/fields/System.Tags", "value": "Build BUILD_NUMBER"},
+        {"op": "add", "path": "/fields/System.Description", "value": "This work item was automatically created because Veracode Backend Scan pipeline failing<br/>System Info: https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:11045:1268054:28977035:28947643:28963293:::"},
+        {"op": "add", "path": "/fields/Microsoft.VSTS.Common.Severity", "value": "3 - Medium"},
+        {"op": "add", "path": "/fields/Custom.Cause", "value": "Build"},
+        {"op": "add", "path": "/fields/Custom.DefectHowFound", "value": "Automated"},
+        {"op": "add", "path": "/fields/Custom.EnvironmentFoundIn", "value": "1 - QA"},
+        {"op": "add", "path": "/fields/Custom.DefectRootCause", "value": "Build"},
+        {"op": "add", "path": "/fields/Custom.ConcourseRootCauseAnalysis", "value": "https://github.com/REPO/actions/runs/RUN_ID"}
+      ]
+      EOF
+      )
+
+      JSON_PAYLOAD="${JSON_PAYLOAD//BUILD_NUMBER/$RUN_NUMBER}"
+      JSON_PAYLOAD="${JSON_PAYLOAD//REPO/$REPO}"
+      JSON_PAYLOAD="${JSON_PAYLOAD//RUN_ID/$RUN_ID}"
+
+      curl -X POST \
+        -H "Authorization: Basic ${AUTH}" \
+        -H "Content-Type: application/json-patch+json" \
+        -d "$JSON_PAYLOAD" \
+        "https://dev.azure.com/${ORG}/${PROJECT}/_apis/wit/workitems/\$Bug?api-version=7.1"
+    shell: bash
+    if: failure()
