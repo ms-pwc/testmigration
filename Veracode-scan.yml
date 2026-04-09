@@ -1,14 +1,7 @@
 trigger: none
 pool:
   vmImage: ubuntu-latest
- 
-# schedules:
-# - cron: "0 0 * * *"
-#   displayName: Daily midnight build
-#   branches:
-#     include:
-#     - develop 
-#   always: true
+
 parameters:
 - name: GITREPO
   type: object
@@ -23,7 +16,7 @@ resources:
   repositories:
   - repository: Search-API
     type: git
-    name: ConcourseSearch/Search-API
+    name: Search-API
     ref: refs/heads/${{ parameters.BRANCH_NAME }}
 jobs: 
 - job: stepList
@@ -34,74 +27,74 @@ jobs:
     - checkout: ${{ REPO }}
       path: 's/${{ REPO }}'
  
-    - task: UsePythonVersion@0
-      displayName: 'Use Python '
-      inputs:
-        versionSpec: '3.11'
-        addToPath: true
-        architecture: 'x64'
-      name: pyTools
-      enabled: true
-    - script: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential python3-dev
-      displayName: 'Install build dependencies'
-    - script: python -m pip install --upgrade pip setuptools wheel flake8 pipenv
-      displayName: 'PIP Install tools'
+  #   - task: UsePythonVersion@0
+  #     displayName: 'Use Python '
+  #     inputs:
+  #       versionSpec: '3.11'
+  #       addToPath: true
+  #       architecture: 'x64'
+  #     name: pyTools
+  #     enabled: true
+  #   - script: |
+  #       sudo apt-get update
+  #       sudo apt-get install -y build-essential python3-dev
+  #     displayName: 'Install build dependencies'
+  #   - script: python -m pip install --upgrade pip setuptools wheel flake8 pipenv
+  #     displayName: 'PIP Install tools'
  
-    - script: |
-        export PIPENV_PYTHON=$(which python)
-        pipenv install -r  $(Pipeline.Workspace)/s/${{ REPO }}/requirements.txt 
-      displayName: 'Install Python Requirements'
-    - script: |
-        pipenv lock
-      displayName: piplock
-    - task: CopyFiles@2
-      displayName: 'Copy Files to: $(Build.ArtifactStagingDirectory)'
-      inputs:
-        SourceFolder: '$(System.DefaultWorkingDirectory)'
-        Contents: |
-          **/*.py
-          **/*.htm
-          **/*.html
-          **/*.lock
-        TargetFolder: $(Build.ArtifactStagingDirectory)
-        CleanTargetFolder: true
-    - task: ArchiveFiles@2
-      inputs:
-        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)'
-        includeRootFolder: false
-        archiveType: 'zip'
-        archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
-        replaceExistingArchive: true
-  - task: Veracode@3
-    inputs:
-      ConnectionDetailsSelection: 'Endpoint'
-      AnalysisService: 'veracode-connection'
-      veracodeAppProfile: 'USA-ADV-Concourse-Search'
-      version: '$(Build.BuildId)'
-      filepath: '$(build.artifactstagingdirectory)'
-      sandboxName: 'Python Dailyscan'
-      createSandBox: true
-      importResults: true
-      failBuildOnPolicyFail: false
-      maximumWaitTime: '360'
-  - task: CreateWorkItem@1
-    inputs:
-      teamProject: 'Concourse Platform'
-      workItemType: 'Bug'
-      title: 'ConcourseSearch Veracode Backend Scan Pipeline Failing'
-      assignedTo: '$(Build.RequestedForId)'
-      areaPath: 'Concourse Platform\Delivery\Autobots Crew\Concourse AI'
-      iterationPath: 'Concourse AI@currentIteration'
-      fieldMappings: |
-        Severity=3 - Medium
-        Cause=Build
-        Defect How Found=Automated
-        Environment Found In=1 - QA
-        Defect Root Cause=Build
-        Repro Steps=This work item was automatically created because Veracode Backend Scan pipeline failing
-        System Info=https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:11045:1268054:28977035:28947643:28963293:::
-        Concourse_RootCauseAnalysis=https://dev.azure.com/pwc-us-adv-digital/concourseRecommendationEngine/_build/results?buildId=$(Build.BuildID)&view=results
-        Tags=Build $(Build.BuildNumber)
-    condition: failed()
+  #   - script: |
+  #       export PIPENV_PYTHON=$(which python)
+  #       pipenv install -r  $(Pipeline.Workspace)/s/${{ REPO }}/requirements.txt 
+  #     displayName: 'Install Python Requirements'
+  #   - script: |
+  #       pipenv lock
+  #     displayName: piplock
+  #   - task: CopyFiles@2
+  #     displayName: 'Copy Files to: $(Build.ArtifactStagingDirectory)'
+  #     inputs:
+  #       SourceFolder: '$(System.DefaultWorkingDirectory)'
+  #       Contents: |
+  #         **/*.py
+  #         **/*.htm
+  #         **/*.html
+  #         **/*.lock
+  #       TargetFolder: $(Build.ArtifactStagingDirectory)
+  #       CleanTargetFolder: true
+  #   - task: ArchiveFiles@2
+  #     inputs:
+  #       rootFolderOrFile: '$(Build.ArtifactStagingDirectory)'
+  #       includeRootFolder: false
+  #       archiveType: 'zip'
+  #       archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+  #       replaceExistingArchive: true
+  # - task: Veracode@3
+  #   inputs:
+  #     ConnectionDetailsSelection: 'Endpoint'
+  #     AnalysisService: 'veracode-connection'
+  #     veracodeAppProfile: 'USA-ADV-Concourse-Search'
+  #     version: '$(Build.BuildId)'
+  #     filepath: '$(build.artifactstagingdirectory)'
+  #     sandboxName: 'Python Dailyscan'
+  #     createSandBox: true
+  #     importResults: true
+  #     failBuildOnPolicyFail: false
+  #     maximumWaitTime: '360'
+  # - task: CreateWorkItem@1
+  #   inputs:
+  #     teamProject: 'Concourse Platform'
+  #     workItemType: 'Bug'
+  #     title: 'ConcourseSearch Veracode Backend Scan Pipeline Failing'
+  #     assignedTo: '$(Build.RequestedForId)'
+  #     areaPath: 'Concourse Platform\Delivery\Autobots Crew\Concourse AI'
+  #     iterationPath: 'Concourse AI@currentIteration'
+  #     fieldMappings: |
+  #       Severity=3 - Medium
+  #       Cause=Build
+  #       Defect How Found=Automated
+  #       Environment Found In=1 - QA
+  #       Defect Root Cause=Build
+  #       Repro Steps=This work item was automatically created because Veracode Backend Scan pipeline failing
+  #       System Info=https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:11045:1268054:28977035:28947643:28963293:::
+  #       Concourse_RootCauseAnalysis=https://dev.azure.com/pwc-us-adv-digital/concourseRecommendationEngine/_build/results?buildId=$(Build.BuildID)&view=results
+  #       Tags=Build $(Build.BuildNumber)
+  #   condition: failed()
