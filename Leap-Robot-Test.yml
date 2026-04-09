@@ -1,0 +1,130 @@
+schedules:
+- cron: 30 20 * * 6
+  displayName: Every Weekend
+  branches:
+    include:
+    - LeapWDCICD
+  always: true
+ 
+parameters:
+  - name: Environment
+    type: string
+    default: QA
+    values:
+      - QA
+      - INT
+      - PERF
+      - STG
+ 
+  - name: Tags
+    type: string
+    default: Regression
+    values:
+      - Regression
+      - Standalone
+ 
+  - name: executor
+    type: string
+    default: robot  
+ 
+trigger: none
+ 
+variables:
+  - name: Tags
+    ${{ if eq( parameters['Tags'], 'Regression') }}:
+      value: "Test_Suite/Regression_Test_Suite.robot"
+    ${{ if eq( parameters['Tags'], 'Standalone') }}:
+      value: "Test_Suite/Standalone_suite.robot"
+ 
+jobs:
+ 
+- job: 'QaAutomation'
+  timeoutInMinutes: 750
+  #pool: '$(agentPool)'
+  pool: 'concourse-modules-qa-test'
+  
+  steps:
+ 
+  - task: Docker@2
+    inputs:
+      containerRegistry: 'w00014-pwc-us-digital-devops-docker.artifacts-west.pwc.com'
+      command: 'login'
+ 
+  - task: CmdLine@2
+    inputs:
+      script: |  
+        docker build --cache-from w00014-pwc-us-digital-devops-docker.artifacts-west.pwc.com/qa/robot:python-3.8-chrome-stable -t robotimage ./
+    timeoutInMinutes: 10
+    displayName: 'Docker build'
+ 
+  - task: CmdLine@2
+    inputs:
+      script: |
+        TEST_ENV=${{ parameters.Environment }}
+        Tags=${{ parameters.Tags }}
+        mkdir -p $(Pipeline.Workspace)/s/$(Build.BuildId)
+        docker run --name robottest --privileged robotimage:latest sh -c "${{ parameters.executor }} --variable Environment:${{parameters.Environment}} -x outputxunit.xml -e temp -d Results $(Tags)" 
+ 
+        docker cp robottest:/scripts/Results $(Pipeline.Workspace)/s/$(Build.BuildId)
+    timeoutInMinutes: 750
+    displayName: 'Run robot tests' 
+    condition: succeeded()
+ 
+  - task: CmdLine@2
+    inputs:
+      script: |
+        cp -R $(Pipeline.Workspace)/s/$(Build.BuildId)/Results ../..
+        cd ../..
+        ls -al
+  - task: CmdLine@2
+    inputs:
+      script: |
+        docker rm -f robottest
+    timeoutInMinutes: 2
+    displayName: 'Force remove robot container' 
+    condition: always()  
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: '$(Pipeline.Workspace)/s/$(Build.BuildId)/Results/outputxunit.xml'
+      testRunTitle: 'Test run title'
+    condition: succeeded()
+    displayName: 'Publish Robot result - Junit'
+     
+    timeoutInMinutes: 2
+ 
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: '$(Pipeline.Workspace)/s/$(Build.BuildId)/Results/'
+      artifact: 'Results'
+      publishLocation: 'pipeline'
+    condition: succeededOrFailed()
+    displayName: 'Publish test artifact'
+ 
+  - task: JakubRumpca.azure-pipelines-html-report.PublishHtmlReport.PublishHtmlReport@1
+    displayName: 'Publish Report'
+    inputs:
+      tabName: "Report"
+      reportDir: '$(Pipeline.Workspace)/s/$(Build.BuildId)/Results/report.html'
+ 
+  - task: JakubRumpca.azure-pipelines-html-report.PublishHtmlReport.PublishHtmlReport@1
+    displayName: 'Publish Log'
+    inputs:
+      tabName: "Log"
+      reportDir: '$(Pipeline.Workspace)/s/$(Build.BuildId)/Results/log.html'
+ 
+  # - task: EmailReport@1
+  #   inputs:
+  #     sendMailConditionConfig: 'Always'
+  #     subject: 'Test email'
+  #     includeInToSectionStr: '2'
+  #     toAddress: 'owolabi.s.fabiyi@pwc.com'
+  #     defaultDomain: 'microsoft.com'
+  #     includeResultsStr: '1, 2'
+  #     groupTestResultsBy: 'run'
+  #     includeCommits: true
+  #     maxTestFailuresToShow: '15'
+  #     includeOthersInTotal: true
+  #     usePreviousEnvironment: false
+  #     enableTLS: true
+  #     smtpConnectionEndpoint: 'Sendgrid'
