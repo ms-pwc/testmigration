@@ -1,0 +1,34 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+ 
+trigger: none
+ 
+pool: InfraDevOpsAgents-Windows
+ 
+ 
+steps:
+# - task: EmailReport@1
+#   inputs:
+#     sendMailConditionConfig: 'Always'
+#     subject: '[{environmentStatus}] {passPercentage} tests passed in $(Release.EnvironmentName) stage for $(Build.BuildNumber)'
+#     includeInToSectionStr: '1, 2, 3, 4'
+#     toAddress: 'owolabi.s.fabiyi@pwc.com'
+#     defaultDomain: 'microsoft.com'
+#     groupTestResultsBy: 'run'
+#     includeCommits: true
+#     maxTestFailuresToShow: '15'
+#     includeOthersInTotal: false
+#     usePreviousEnvironment: false
+#     smtpConnectionEndpoint: 'Sendgrid'
+ 
+- task: SendGridEmail@2
+  inputs:
+    SendGridApiKey: ''
+    FromAddress: 'pipelines@leapdev.pwc.com'
+    ToAddresses: 'owolabi.s.fabiyi@pwc.com, sai.k.pudi@pwc.com'
+    Subject: 'Testing Pipeline email'
+    emailBodyFormat: 'InLine'
+    EmailBody: 'Testing sending email from pipeline using Sendgrid SMTP'
+    SendAsHTML: true
