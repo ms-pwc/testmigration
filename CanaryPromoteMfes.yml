@@ -1,0 +1,56 @@
+parameters:
+  - name: RELEASE_LABEL
+    default: "CO.2024.Q4.3.0.14"    # use 1.0.0 for non-canary environments
+ 
+ 
+  - name: environmentType
+    default: us-stage
+    values:
+      - us-stage
+      - us-prod
+      - emea-stage
+      - emea-prod
+      - apac-stage
+      - apac-prod
+ 
+variables:
+  - group: 'ConcourseCore'
+  - group: ${{ parameters.environmentType }}
+  - name: 'ENVIRONMENT'
+    value:  ${{ parameters.environmentType }}
+  - name: 'RELEASE_LABEL'
+    value: ${{ parameters.RELEASE_LABEL }}
+ 
+ 
+trigger: none
+pr:
+  branches:
+    include:
+    - noTrigger
+ 
+pool:
+  name: 'dds-concourse-ubuntu2004-01'
+  workspace:
+    clean: all
+ 
+stages:
+- stage: deploy
+  variables:
+  - group: ${{ parameters.environmentType }}
+  jobs:
+  - deployment: 'deploy'
+    workspace:
+     clean: all
+    environment: $(ENVIRONMENT)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - script: ./update-default-ld-rule.sh
+            displayName: LanchDarkly
+            workingDirectory: $(Pipeline.Workspace)/s/deploy
+            env:
+              API_KEY: $(LD_API_AUTH_TOKEN)
+              appVersion: $(appVersion)
+ 
