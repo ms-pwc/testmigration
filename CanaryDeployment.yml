@@ -1,0 +1,171 @@
+parameters:
+ 
+- name: SOURCE_HOSTNAME
+  displayName: SOURCE_HOSTNAME
+  type: string
+  default: 'concourse-int.pwc.com'
+  values:
+  - concourse-dev.pwc.com
+  - concourse-qa.pwc.com
+  - concourse-uat2.pwc.com
+  - concourse-int.pwc.com
+  - concourse-stage.pwc.com/amer
+  - concourse-stage.pwc.com/emea
+  - concourse-stage.pwc.com/apac
+  - concourse2.pwc.com/amer
+  - concourse2.pwc.com/emea
+  - concourse2.pwc.com/apac
+ 
+- name: TARGET_HOSTNAME
+  displayName: TARGET_HOSTNAME
+  type: string
+  default: 'concourse-stage.pwc.com/amer'
+  values:
+  - concourse-dev.pwc.com
+  - concourse-qa.pwc.com
+  - concourse-uat2.pwc.com
+  - concourse-int.pwc.com
+  - concourse-stage.pwc.com/amer
+  - concourse-stage.pwc.com/emea
+  - concourse-stage.pwc.com/apac
+  - concourse2.pwc.com/amer
+  - concourse2.pwc.com/emea
+  - concourse2.pwc.com/apac
+ 
+- name: DEBUG
+  type: boolean
+  default: false
+ 
+ 
+variables:
+  - name: SOURCE_HOSTNAME
+    value: ${{ parameters.SOURCE_HOSTNAME }}
+  - name: TARGET_HOSTNAME
+    value: ${{ parameters.TARGET_HOSTNAME }}
+  
+  # I'm doing this crazy elseif because I don't want to use variable groups with approval gates
+  # I'm also trying to reduce the number of parameters in the pipeline from a user perspective
+  # It's fine.. you'll never have to look at this.
+  - name: SOURCE_ENV
+    ${{ if eq(parameters.SOURCE_HOSTNAME, 'concourse-dev.pwc.com') }}:
+      value: 'concourse-core-us-dev'
+    ${{ elseif eq(parameters.SOURCE_HOSTNAME, 'concourse-qa.pwc.com') }}:
+      value: 'concourse-core-us-qa'
+    ${{ elseif eq(parameters.SOURCE_HOSTNAME, 'concourse-int.pwc.com') }}:
+      value: 'concourse-core-us-int-2'
+    ${{ elseif eq(parameters.SOURCE_HOSTNAME, 'concourse-stage.pwc.com/amer') }}:
+      value: 'concoursecore-us-stage'
+    ${{ elseif eq(parameters.SOURCE_HOSTNAME, 'concourse-stage.pwc.com/emea') }}: 
+      value: 'concourse-core-emea-stage'
+    ${{ elseif eq(parameters.SOURCE_HOSTNAME, 'concourse-stage.pwc.com/apac') }}: 
+      value: 'concourse-core-apac-stage'
+    ${{ elseif eq(parameters.SOURCE_HOSTNAME, 'concourse2.pwc.com/amer') }}:
+      value: 'concourse-core-us-prod'
+    ${{ elseif eq(parameters.SOURCE_HOSTNAME, 'concourse2.pwc.com/emea') }}:
+      value: 'concourse-core-emea-prod'
+    ${{ elseif eq(parameters.SOURCE_HOSTNAME, 'concourse2.pwc.com/apac') }}:
+      value: 'concourse-core-apac-prod'
+  - name: TARGET_ENV
+    ${{ if eq(parameters.TARGET_HOSTNAME, 'concourse-dev.pwc.com') }}:
+      value: 'concourse-core-us-dev'
+    ${{ elseif eq(parameters.TARGET_HOSTNAME, 'concourse-qa.pwc.com') }}:
+      value: 'concourse-core-us-qa'
+    ${{ elseif eq(parameters.TARGET_HOSTNAME, 'concourse-int.pwc.com') }}:
+      value: 'concourse-core-us-int-2'
+    ${{ elseif eq(parameters.TARGET_HOSTNAME, 'concourse-stage.pwc.com/amer') }}:
+      value: 'concoursecore-us-stage'
+    ${{ elseif eq(parameters.TARGET_HOSTNAME, 'concourse-stage.pwc.com/emea') }}:
+      value: 'concourse-core-emea-stage'
+    ${{ elseif eq(parameters.TARGET_HOSTNAME, 'concourse-stage.pwc.com/apac') }}:
+      value: 'concourse-core-apac-stage'
+    ${{ elseif eq(parameters.TARGET_HOSTNAME, 'concourse2.pwc.com/amer') }}:
+      value: 'concourse-core-us-prod'
+    ${{ elseif eq(parameters.TARGET_HOSTNAME, 'concourse2.pwc.com/emea') }}:
+      value: 'concourse-core-emea-prod'
+    ${{ elseif eq(parameters.TARGET_HOSTNAME, 'concourse2.pwc.com/apac') }}:
+      value: 'concourse-core-apac-prod'
+ 
+trigger: none
+pr:
+  branches:
+    include:
+    - noTrigger
+ 
+pool:
+  name: 'dds-concourse-ubuntu2004-01'
+  workspace:
+    clean: all
+ 
+stages:
+  - stage: 'deploymentDoc'
+    variables:
+      - group: ConcourseCore
+    jobs:
+      - job:
+        displayName: Deployment Steps
+        steps:
+          - task: DownloadSecureFile@1
+            name: readonlyKubeconfig
+            displayName: 'Download Kubeconfig'
+            inputs:
+              secureFile: readonly-kubeconfig
+          - script: |
+               mkdir ~/.kube
+               ln -s $(readonlyKubeconfig.secureFilePath) ~/.kube/config
+               kubectl config use-context ${SOURCE_ENV}
+               kubectl get pods
+               ./canarystat.sh ${SOURCE_ENV} 2> /dev/null
+            displayName: $(SOURCE_ENV) Status
+            workingDirectory: canary-audit
+            env:
+              WORKING_DIRECTORY: $(Build.SourcesDirectory)
+              KUBECONFIG: $(readonlyKubeconfig.secureFilePath)
+            condition: eq(${{ parameters.DEBUG }}, true)
+          - script: |
+ 
+               mkdir ~/.kube
+               ln -s $(readonlyKubeconfig.secureFilePath) ~/.kube/config
+               kubectl config use-context ${TARGET_ENV}
+               kubectl get pods
+               ./canarystat.sh ${TARGET_ENV} 2> /dev/null
+            displayName: $(TARGET_ENV) Status
+            workingDirectory: canary-audit
+            env:
+              WORKING_DIRECTORY: $(Build.SourcesDirectory)
+              KUBECONFIG: $(readonlyKubeconfig.secureFilePath)
+            condition: eq(${{ parameters.DEBUG }}, true)
+ 
+          - script: |
+               ./generate-deployment.sh | sed 's/\n//g' > deployment-steps-$(Build.BuildNumber).txt
+            displayName: Generate Document
+            workingDirectory: canary-audit
+            env:
+              WORKING_DIRECTORY: $(Build.SourcesDirectory)
+              KUBECONFIG: $(readonlyKubeconfig.secureFilePath)
+ 
+          - script: |
+               echo "###################################################"
+               echo '####             Release Document             #####'
+               echo "###################################################"
+               document=$(cat deployment-steps-$(Build.BuildNumber).txt | grep -v 'Cannot iterate over null')
+               echo -e "${document}"
+            displayName: Preview Document
+            workingDirectory: canary-audit
+ 
+          - task: PublishPipelineArtifact@1  
+            inputs:  
+              targetPath: $(Pipeline.Workspace)/s/canary-audit/deployment-steps-$(Build.BuildNumber).txt  
+              artifact: deployment-steps-$(Build.BuildNumber).txt  
+              publishLocation: 'pipeline'  
+            condition: succeededOrFailed()  
+            displayName: 'Publish Deployment Steps Document as ADO Artifact'  
+            
+          - task: PublishPipelineArtifact@1  
+            inputs:  
+              targetPath: $(Pipeline.Workspace)/s/canary-audit/target-env-details.txt  
+              artifact: target-env-details.txt  
+              publishLocation: 'pipeline'  
+            condition: succeededOrFailed()  
+            displayName: 'Publish Target Environment Details as ADO Artifact'  
+            
+ 
