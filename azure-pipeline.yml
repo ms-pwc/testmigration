@@ -1,5 +1,5 @@
-pool:
-  name: dds-concourse-ubuntu2004-01
+#pool:
+ # name: dds-concourse-ubuntu2004-01
 parameters:
   - name: Operation
     type: string
