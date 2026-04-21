@@ -22,6 +22,7 @@ parameters:
     - 'PERF'
     - 'STAGE'
     - 'PROD'
+  
  
   - name: SecretName
     type: string
@@ -32,6 +33,10 @@ parameters:
  
 variables:
   - group: ${{ parameters.ENVIRONMENT }}
+  - name: Password
+    value: "%rsfgdr6jbAxhb"
+  - name: APIKey
+    value: "ufusahfvjdbfkyfiuewbfiyy7hbdsjfhb48ijdsbe7bijb"
   - name: operation
     value: ${{ parameters.Operation }}
   - ${{ if eq(parameters.operation, 'set') }}:
