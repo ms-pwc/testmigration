@@ -33,37 +33,92 @@ stages:
 - ${{ each stage in parameters.cdStages }}:
   - stage: ${{ stage.name }}
     displayName: Deploy - ${{ stage.environment }}
+    dependsOn: ${{ stage.dependsOn }}
+    ${{ if ne(parameters.deploy[stage.name].conditions, '') }}:
+      condition: ${{ parameters.deploy[stage.name].conditions }}
 
     variables:
       - ${{ each var in parameters.variables }}:
           - ${{ var }}
 
     jobs:
-      - deployment: Deploy
-        environment: ${{ stage.environment }}
+      - ${{ each deployJob in parameters.deploy[stage.name].jobs }}:
+          - ${{ if eq(deployJob.type, 'k8s') }}:
+              deployment: ${{ coalesce(deployJob.name, 'Deploy') }}
+              displayName: ${{ coalesce(deployJob.deployName, 'Kubernetes Deploy') }}
+              environment: ${{ coalesce(deployJob.environment, stage.environment) }}
+              pool: ${{ deployJob.pool }}
+              timeoutInMinutes: ${{ deployJob.jobOptions.timeoutInMinutes }}
+              workspace:
+                clean: ${{ deployJob.jobOptions.workspace.clean }}
+              variables:
+                - ${{ each jobVar in deployJob.variables }}:
+                    - ${{ jobVar }}
 
-        strategy:
-          runOnce:
-            deploy:
+              strategy:
+                runOnce:
+                  deploy:
+                    steps:
+                      - checkout: self
+
+                      - ${{ each step in deployJob.beforeDeploy }}:
+                          - ${{ step }}
+
+                      # Default deployment action for k8s jobs.
+                      - task: KubernetesManifest@1
+                        displayName: Deploy Kubernetes Manifests
+                        inputs:
+                          action: deploy
+                          kubernetesServiceConnection: ${{ deployJob.serviceConnection }}
+                          namespace: ${{ deployJob.namespace }}
+                          manifests: |
+                            $(K8S_DEPLOYMENT_YAML)
+                            $(K8S_CONFIGMAP_YAML)
+                            $(K8S_SERVICE_YAML)
+
+                      - ${{ each step in deployJob.postDeploy }}:
+                          - ${{ step }}
+
+          - ${{ if ne(deployJob.type, 'k8s') }}:
+              job: ${{ coalesce(deployJob.name, 'GenericJob') }}
+              displayName: Generic Deploy Job
+              pool: ${{ deployJob.pool }}
               steps:
                 - script: |
-                    echo "Application: ${{ parameters.app.id }}"
-                    echo "Version: ${{ parameters.version.custom.full }}"
-                    echo "Environment: ${{ stage.environment }}"
-                  displayName: Echo Parameters
+                    echo "Unsupported deploy job type: ${{ deployJob.type }}"
+                  displayName: Unsupported Deploy Type
 
-# PR Configuration Placeholder
+# PR Configuration
 - stage: PR
   condition: false
   jobs:
-    - job: Build
-      steps:
-        - script: echo "PR Stage"
+    - ${{ each prStage in parameters.pr.stages }}:
+        - job: ${{ prStage }}
+          steps:
+            - script: |
+                echo "PR Stage: ${{ prStage }}"
+              displayName: PR Stage
 
-# Scan Configuration Placeholder
+# Scan Configuration
 - stage: Scan
   condition: false
   jobs:
     - job: LicenseScan
+      pool: ${{ parameters.scan.licenseScan.pool }}
+      timeoutInMinutes: ${{ parameters.scan.jobOptions.timeoutInMinutes }}
+      workspace:
+        clean: ${{ parameters.scan.jobOptions.workspace.clean }}
+      variables:
+        - ${{ each scanVar in parameters.scan.licenseScan.variables }}:
+            - ${{ scanVar }}
       steps:
-        - script: echo "License Scan Stage"
+        - checkout: self
+
+        - ${{ each step in parameters.scan.licenseScan.beforeDownload }}:
+            - ${{ step }}
+
+        - ${{ each step in parameters.scan.licenseScan.beforeScan }}:
+            - ${{ step }}
+
+        - ${{ each step in parameters.scan.licenseScan.custom }}:
+            - ${{ step }}
