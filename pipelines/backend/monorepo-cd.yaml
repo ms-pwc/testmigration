@@ -1,0 +1,490 @@
+---
+parameters:
+  - name: configBranch
+    type: string
+    default: "2.0-cicd"
+
+  - name: workingDirectory
+    type: string
+    default: "."
+
+  - name: appId
+    type: string
+
+  - name: appVersion
+    type: string
+    default: "1.0.0"
+
+  - name: appArtifactDirectory
+    type: string
+    default: "dist"
+
+  - name: artifactoryGenericRepo
+    type: string
+    default: w00014-pwc-us-digital-devops-generic
+
+  - name: artifactoryGenericRepoPath
+    type: string
+    default: concoursecore
+
+  - name: genericArtifactoryServiceConnection
+    type: string
+    default: default-jfrog-rw-svc
+
+  - name: projectName
+    type: string
+    default: ConcourseCore
+
+  - name: agentPool
+    values:
+      - InfraDevOpsAgents
+      - dds-concourse-ubuntu2004-01
+    default: dds-concourse-ubuntu2004-01
+
+  # Deployment environments
+  - name: cdStages
+    type: object
+    default:
+      - name: us_dev
+        environment: us-dev
+        param_name: dev
+        dependsOn:
+          - Build
+
+      - name: us_qa
+        environment: us-qa
+        param_name: qa
+        dependsOn:
+          - Build
+
+      - name: qa_sanity
+        environment: us-qa
+        param_name: qa
+        dependsOn:
+          - us_qa
+
+      - name: us_perf
+        environment: us-perf
+        param_name: perf
+        dependsOn:
+          - Build
+
+      - name: us_int
+        environment: us-int
+        param_name: int
+        dependsOn:
+          - Build
+
+
+trigger: none
+
+resources:
+  repositories:
+    - repository: library
+      type: git
+      name: InfraDevOps/digital-cicd
+      ref: refs/heads/develop
+
+    - repository: ConcourseCore
+      type: github
+      endpoint: pwc-us-adv-tech-enablement
+      name: pwc-us-adv-tech-enablement/ConcourseCore
+      ref: refs/heads/develop
+
+    - repository: microserviceConfig # microservice config yaml files
+      type: github
+      endpoint: concourse-core-automation_pwcit
+      name: pwc-us-adv-tech-enablement/tech-enablement
+      ref: refs/heads/main
+
+extends:
+  template: pipelines/pipeline-v3.0.yaml@library
+  parameters:
+    cdStages: ${{ parameters.cdStages }}
+    variables:
+      - group: infra-devops-secrets
+      - group: ConcourseCore
+      - group: DevOps - Common
+      - group: Concoursecicd
+      - group: ConcourseNotifcations
+      - name: CommitMessage
+        value: $(Build.SourceVersionMessage)
+      - name: VERACODE_API_ID
+        value: $(VERACODE-PIPELINE-API-ID)
+      - name: VERACODE_API_KEY
+        value: $(VERACODE-PIPELINE-API-KEY)
+      - name: NPM_TOKEN
+        value: $(ADO-JFROG-RO-ACCESS-TOKEN)
+      - name: APP_DIR
+        value: ""
+      - name: DEPLOYMENT_TYPE
+        value: "kubernetes"
+      - name: SERVICE_NAME
+        value: ${{ parameters.appId }}
+      - name: DOCKER_CUSTOM_ARGUMENT
+        value: '--build-arg NPM_CONFIG__AUTH=$(ADO-JFROG-RO-ACCESS-TOKEN) --build-arg NPM_TOKEN=$(ADO-JFROG-RO-ACCESS-TOKEN) --build-arg APP_ID=${{ parameters.appId }} --build-arg APP_VERSION=$(Build.SourceBranchName)-$(Build.BuildNumber)  --build-arg BUILD_URI=$(Build.BuildUri) --build-arg DEFINITION_ID=$(System.DefinitionId) --build-arg COMMIT_ID=$(Build.SourceVersion) --build-arg COMMIT_MESSAGE="$(CommitMessage)" '
+      - name: K8S_DEPLOYMENT_YAML
+        value: "ConcourseCore/k8s/$(SERVICE_NAME)/deployment.yaml"
+      - name: K8S_SERVICE_YAML
+        value: "ConcourseCore/k8s/microservice-template/service.yaml"
+      - name: K8S_CONFIGMAP_YAML
+        value: "ConcourseCore/k8s/$(SERVICE_NAME)/configs/$(ENVIRONMENT)/$(SERVICE_NAME).configmap.yaml"
+      - name: NPMOPTIONS
+        value: --use-openssl-ca --max_old_space_size=8192
+      - name: configBranch
+        value: ${{ parameters.configBranch }}
+      - name: ASB_QUEUE_SUFFIX
+        value: ' '
+      - name: RELEASE_LABEL
+        value: "$(Build.SourceBranchName)"
+      - name: EVENTHUB_CONSUMER_GROUP
+        value: '$Default'
+
+    version:
+      custom:
+        full: "${{ parameters.appVersion }}"
+        short: ${{ variables['Build.SourceBranchName'] }}
+    app:
+      id: ${{parameters.appId}}
+      rootPath: "${{coalesce(parameters.workingDirectory,'.')}}"
+
+    deploy:
+      ${{ each stage in parameters.cdStages }}:
+        ${{ stage.name }}:
+
+          # Protect upper envs, even though not currently targeted by this pipeline
+          ${{ if in(stage.name, 'us_stage', 'us_prod', 'emea_stage', 'emea_prod', 'apac_stage', 'apac_prod')}}:
+            conditions: contains(variables['BUILD_SOURCE_BRANCH'],'heads/release/')
+
+          environment: ${{ stage.environment }}
+          jobs:
+            - type: k8s
+              variables:
+                - group: ${{ stage.environment }}
+                - name: K8S_NAMESPACE_MESH
+                  value: co-mesh
+                - name: CONFIGMAP_NAME
+                  ${{ if in(stage.name, 'us_stage', 'emea_stage', 'apac_stage', 'us_prod', 'emea_prod', 'apac_prod')}}:
+                    value: "${{ parameters.appId }}-${{ lower(replace(variables['build.sourcebranchname'], '.', '-')) }}-configmap"
+                  ${{ else }}:
+                    value: "${{ parameters.appId }}-configmap"
+                - name: DEPLOYMENT_NAME
+                  ${{ if in(stage.name, 'us_stage', 'emea_stage', 'apac_stage', 'us_prod', 'emea_prod', 'apac_prod')}}:
+                    value: "${{ parameters.appId }}-${{ lower(replace(variables['build.sourcebranchname'], '.', '-')) }}"
+                  ${{ else }}:
+                    value: "${{ parameters.appId }}"
+                - name: SECRETMAP_NAME
+                  ${{ if in(stage.name, 'us_stage', 'emea_stage', 'apac_stage', 'us_prod', 'emea_prod', 'apac_prod')}}:
+                    value: ${{ parameters.appId }}-${{ lower(replace(variables['build.sourcebranchname'], '.', '-')) }}-secretmap
+                  ${{ else }}:
+                    value: ${{ parameters.appId }}-secretmap
+                - name: CONFIGMAP_YAML_NAME
+                  ${{ if in(stage.name, 'us_stage', 'emea_stage', 'apac_stage', 'us_prod', 'emea_prod', 'apac_prod')}}:
+                    value: "${{ parameters.appId }}-${{ lower(replace(variables['build.sourcebranchname'], '.', '-')) }}-yaml"
+                  ${{ else }}:
+                    value: "${{ parameters.appId }}-yaml"
+                - name: REPLICAS
+                  value: 1
+
+              deployName: $(SERVICE_NAME)
+              serviceConnection: "${{ stage.environment }}-kubernetes-svc"
+              environment: ${{ stage.environment }}
+              namespace: $(K8S_NAMESPACE_MESH)
+              name: ${{ stage.param_name }}
+              pool:
+                name: "${{ parameters.agentPool }}"
+              jobOptions:
+                timeoutInMinutes: '480'
+                workspace:
+                  clean: all
+              beforeDeploy:
+                - bash: |
+                    echo "Build.SourceBranch: $(Build.SourceBranch)"
+                  displayName: Echo Data
+
+                - checkout: ConcourseCore
+                  path: s/ConcourseCore
+                  fetchDepth: 0
+                  clean: true
+                  displayName: Pull ConcourseCore Repo
+
+                - script: |
+                    pwd
+                    git config --global user.email "you@example.com"
+                    git config --global user.name "Azure DevOps"
+                    git pull
+                    git fetch --all
+                    
+                    if [[ "$(Build.SourceBranch)" =~ refs/heads/release/* ]]; then
+                      git checkout "$(Build.SourceBranch)"
+                    else
+                      git checkout develop
+                    fi
+                    echo "current branch: $(git branch --show-current)"
+                  workingDirectory: $(Pipeline.Workspace)/s/ConcourseCore
+                  displayName: Checkout ConcourseCore Branch - $(Build.SourceBranch)
+
+                - checkout: microserviceConfig
+                  path: s/microserviceConfig
+                  fetchDepth: 0
+                  clean: true
+                  displayName: Pull tech-enablement Repo
+                  
+                - script: |
+                    releasePattern=".*release\/"
+                    featurePattern=".*feature\/"
+                    developPattern=".*develop$"
+                    masterPattern=".*main$"
+                    pwd; git config --global user.email "you@example.com"; git config --global user.name "Azure DevOps"; git pull; git fetch --all
+                    if [[ "$(Build.SourceBranch)" =~ $developPattern ]]
+                      then
+                        git checkout develop
+                      elif [[ "$(Build.SourceBranch)" =~ $featurePattern ]]; then
+                        git checkout "feature/$(Build.SourceBranchName)"
+                      elif [[ "$(Build.SourceBranch)" =~ $releasePattern ]]; then
+                        git checkout "release/$(Build.SourceBranchName)"
+                      elif [[ "$(Build.SourceBranch)" =~ $masterPattern ]]; then
+                        git checkout main
+                      else
+                        git checkout main
+                    fi
+                    pwd; git branch -a
+                  workingDirectory: $(Pipeline.Workspace)/s/microserviceConfig
+                  displayName: Checkout tech-enablement Branch - $(Build.SourceBranch)
+
+                - bash: |
+                    echo "##vso[task.setvariable variable=APP_VERSION]${{ parameters.appVersion }}"
+                  displayName: Set APP Version
+
+                - bash: |
+                    echo APP_VERSION $(APP_VERSION)
+                    echo $(ver) $(K8S_NAMESPACE) $(K8S_NAMESPACE_MESH)
+                  displayName: Display Version Number
+                  
+                - bash: |
+                    echo Service name ${{ parameters.appId }}
+                    echo Environment ${{ stage.environment }}
+                    SVC_REPLICAS=("concourse-appintegrations-mgmt-svc" "concourse-auth-svc" "concourse-chat-svc" "concourse-deliverables-svc" "concourse-deliverymap-svc" "concourse-digital-assets-svc" "concourse-engagement-svc" "concourse-integration-ai-svc" "concourse-integration-ipaas-svc" "concourse-integration-jira-svc" "concourse-integration-miro-svc" "concourse-integration-ms365-sharepoint-svc" "concourse-integration-provision-svc" "concourse-integration-pwcinternal-svc" "concourse-notification-svc" "concourse-notificationserver-svc" "concourse-pursuit-scope-svc" "concourse-raid-svc" "concourse-reports-svc" "concourse-user-profile-svc" "concourse-control-hub-svc")
+                    TARGET_ENVS=("us-dev" "us-qa" "us-int" "us-perf")
+                    
+                    # Check if service is in the list
+                    SERVICE_FOUND=false
+                    for svc in "${SVC_REPLICAS[@]}"; do
+                      if [[ "$svc" == "${{ parameters.appId }}" ]]; then
+                        SERVICE_FOUND=true
+                        break
+                      fi
+                    done
+                    
+                    # Check if environment is in the target list
+                    ENV_FOUND=false
+                    for env in "${TARGET_ENVS[@]}"; do
+                      if [[ "$env" == "${{ stage.environment }}" ]]; then
+                        ENV_FOUND=true
+                        break
+                      fi
+                    done
+                    
+                    if [[ "$SERVICE_FOUND" == "true" ]] && [[ "$ENV_FOUND" == "true" ]]; then
+                      echo "##vso[task.setvariable variable=REPLICAS]2"
+                      echo "Setting REPLICAS to 2 for ${{ parameters.appId }} in ${{ stage.environment }}"
+                    else
+                      echo "Using default REPLICAS (1) for ${{ parameters.appId }} in ${{ stage.environment }}"
+                    fi
+                  displayName: Set Replicas to 2 for Core Services
+
+                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
+                  inputs:
+                    targetFiles: |
+                      $(K8S_DEPLOYMENT_YAML)
+                      $(K8S_CONFIGMAP_YAML)
+                      $(K8S_SERVICE_YAML)
+                      ConcourseCore/k8s/$(SERVICE_NAME)/service.yaml
+                      $(Pipeline.Workspace)/s/microserviceConfig/config/docker.k8.yml
+                    encoding: "auto"
+                    tokenPattern: "custom"
+                    tokenPrefix: "<{"
+                    tokenSuffix: "}>"
+                    writeBOM: true
+                    actionOnMissing: "warn"
+                    keepToken: false
+                    actionOnNoFiles: "continue"
+                    enableTransforms: false
+                    enableRecursion: false
+                    useLegacyPattern: false
+                    enableTelemetry: true
+                    defaultValue: " "
+                    verbosity: detailed
+                  displayName: Replace Tokens
+                  
+
+                - bash: |
+                    mkdir -p ./k8s/${{ stage.environment }}
+                    echo "
+                    ---
+
+                    apiVersion: v1
+                    kind: ConfigMap
+                    metadata:
+                      name: $(CONFIGMAP_YAML_NAME)
+                      namespace: $(K8S_NAMESPACE_MESH)
+                    data:
+                      config.yaml: |
+                    " >> $(K8S_CONFIGMAP_YAML)
+
+                    cat $(Pipeline.Workspace)/s/microserviceConfig/config/docker.k8.yml | sed  -e 's/^/    /' >> $(K8S_CONFIGMAP_YAML)
+
+                    # Copy service.yaml: prefer service-specific, fall back to template
+                    if [ -f "ConcourseCore/k8s/$(SERVICE_NAME)/service.yaml" ]; then
+                      cp ConcourseCore/k8s/$(SERVICE_NAME)/service.yaml ./k8s/${{ stage.environment }}
+                    else
+                      cp ConcourseCore/k8s/microservice-template/service.yaml ./k8s/${{ stage.environment }}
+                    fi
+                    
+                    cp $(K8S_DEPLOYMENT_YAML) ./k8s/${{ stage.environment }}
+                    cp $(K8S_CONFIGMAP_YAML) ./k8s/${{ stage.environment }}
+                  displayName: Copy Manifests
+
+                # This was part of a canary test to use separate services in lieu of subsets
+                #- bash: |
+                #    sed '/tags.datadoghq.com\/version/d' ./k8s/${{ stage.environment }}/$(SERVICE_NAME)-service.yaml
+                #  displayName: Remove Service Selector
+                #  condition: in(${{ stage.environment }},'us-dev', 'us-qa', 'us-int', 'us-perf')
+
+                - bash: |
+                    cat $(K8S_DEPLOYMENT_YAML)
+                  displayName: Display Deployment Manifest
+                  
+                - bash: |
+                    cat $(K8S_CONFIGMAP_YAML)
+                  displayName: Display ConfigMap Manifest
+                  
+                - task: CopyFiles@2
+                  enabled: false
+                  inputs:
+                    Contents: |
+                      $(K8S_DEPLOYMENT_YAML)
+                      $(K8S_CONFIGMAP_YAML)
+                      ConcourseCore/k8s/microservice-template/service.yaml
+                    TargetFolder: "$(Build.ArtifactStagingDirectory)/pipeline_files/"
+                    CleanTargetFolder: true
+                  displayName: Copy Manifests for publishing
+
+                - task: PublishBuildArtifacts@1
+                  enabled: false
+                  inputs:
+                    PathtoPublish: "$(Build.ArtifactStagingDirectory)/pipeline_files/"
+                    ArtifactName: "drop"
+                    publishLocation: "Container"
+                  displayName: Publish Manifests
+                
+              postDeploy:
+                - bash: |
+
+                    dateTimeNow=$(date "+%Y-%m-%d %H:%M:%S")
+                    data="{\"name\":\"${{ parameters.appId }}\",\"repository_url\":\"https://github.com/pwc-us-adv-tech-enablement/tech-enablement\",\"ref\":\"${{ parameters.configBranch }}\",\"start_date\":\"$dateTimeNow\",\"finished_date\":\"$dateTimeNow\",\"env\":\"${{ stage.name }}\",\"result\":\"$(Agent.JobStatus)\",\"state\":\"finished\",\"number\":\"$(Build.BuildId)\"}"
+                    echo $data
+                    curl -X POST '$(WAYDEV_API_HOST)deployments' \
+                    --header 'Accept: application/json' \
+                    --header 'Content-Type: application/json' \
+                    --header 'Authorization: $(WAYDEV_API_KEY)' \
+                    --data "$data"
+                  displayName: Push WayDev Metadata Success
+                  condition: always()
+                - task: DeleteFiles@1
+                  inputs:
+                    SourceFolder: "$(Build.ArtifactStagingDirectory)/pipeline_files/"
+                    Contents: "*"
+                  condition: always()
+                  displayName: Cleanup Staging Dir
+
+                - task: Kubernetes@1
+                  inputs:
+                    connectionType: "Kubernetes Service Connection"
+                    kubernetesServiceEndpoint: "${{ stage.environment }}-kubernetes-svc"
+                    namespace: $(K8S_NAMESPACE_MESH)
+                    command: "describe"
+                    arguments: po -l tags.datadoghq.com/service=$(SERVICE_NAME)
+                  condition: failed()
+                  displayName: Describe Kube Error
+
+    pr:
+      enforceUnitTest: false
+      targetBranches:
+        - develop
+      stages:
+        - Build
+        
+    scan:
+      jobOptions:
+        timeoutInMinutes: 240
+        workspace:
+          clean: all
+
+      licenseScan:
+        pool: "${{ parameters.agentPool }}"
+        variables:
+          - group: infra-devops-secrets
+          - group: ConcourseCore
+          - name: NPM_TOKEN
+            value: $(ADO-JFROG-RO-ACCESS-TOKEN)
+        language: nodejs
+        nodeVersion: 22.x
+        autoDownload: true
+        endpoint: default-blackduck-svc
+        project: US-PwC-US-Digital_Portfolio-Concourse-api-srv
+        version: $(APP_VERSION_BD)
+        conditions: |
+          or
+          (
+            contains(variables['BUILD_SOURCE_BRANCH'],'heads/main'),
+            contains(variables['BUILD_SOURCE_BRANCH'],'heads/feature/')
+          )
+        custom:
+          - task: SynopsysDetectTask@8
+            continueOnError: true
+            inputs:
+              BlackDuckService: default-blackduck-svc
+              DetectFolder: $(Build.SourcesDirectory)
+              DetectArguments: |
+                --detect.project.name="US-PwC-US-Digital_Portfolio-Concourse-api-srv"
+                --detect.project.version.name="$(APP_VERSION_BD)"
+                --detect.source.path="$(Build.SourcesDirectory)"
+                --detect.npm.include.dev.dependencies=true
+                --detect.project.version.update=false
+                --detect.included.detector.types=NPM
+                --detect.npm.path="$(NPM_BIN_PATH)"
+                --detect.blackduck.scan.mode=RAPID
+                --detect.blackduck.rapid.compare.mode=BOM_COMPARE_STRICT
+                --detect.cleanup=false
+              DetectVersion: latest
+            displayName: Rapid Scan
+
+        beforeDownload:
+          - script: |
+              sudo find coverage -type d -prune | xargs chown -fR AzDevOps:AzDevOps
+              sudo find dist -type d -prune | xargs chown -fR AzDevOps:AzDevOps
+              sudo find reporters -type d -prune | xargs chown -fR AzDevOps:AzDevOps
+            continueOnError: true
+            displayName: "Making files accesibles"
+            
+        beforeScan:
+          - script: |
+              export NPM_TOKEN=$(ADO-JFROG-RO-ACCESS-TOKEN)
+              npmpath="$(npm config get prefix)/bin"
+              echo $npmpath
+              echo "##vso[task.setvariable variable=NPM_BIN_PATH]$npmpath"
+            displayName: "Set NPM BIN PATH into a var"
+
+          - script: |
+              releasePattern=".*release\/"
+              developPattern=".*main$"
+              if [[ "$(Build.SourceBranch)" =~ $releasePattern ]]
+                then
+                  echo "##vso[task.setvariable variable=APP_VERSION_BD]release-head"
+              fi
+              if [[ "$(Build.SourceBranch)" =~ $developPattern ]]
+                then
+                  echo "##vso[task.setvariable variable=APP_VERSION_BD]develop-head"
+              fi
+            displayName: "Set app version for Black Duck"
