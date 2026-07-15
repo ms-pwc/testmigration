@@ -1,0 +1,69 @@
+parameters:
+  - name: cdStages
+    type: object
+    default: []
+
+  - name: variables
+    type: object
+    default: []
+
+  - name: version
+    type: object
+    default: {}
+
+  - name: app
+    type: object
+    default: {}
+
+  - name: deploy
+    type: object
+    default: {}
+
+  - name: pr
+    type: object
+    default: {}
+
+  - name: scan
+    type: object
+    default: {}
+
+stages:
+
+# Deployment Stages
+- ${{ each stage in parameters.cdStages }}:
+  - stage: ${{ stage.name }}
+    displayName: Deploy - ${{ stage.environment }}
+
+    variables:
+      - ${{ each var in parameters.variables }}:
+          - ${{ var }}
+
+    jobs:
+      - deployment: Deploy
+        environment: ${{ stage.environment }}
+
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: |
+                    echo "Application: ${{ parameters.app.id }}"
+                    echo "Version: ${{ parameters.version.custom.full }}"
+                    echo "Environment: ${{ stage.environment }}"
+                  displayName: Echo Parameters
+
+# PR Configuration Placeholder
+- stage: PR
+  condition: false
+  jobs:
+    - job: Build
+      steps:
+        - script: echo "PR Stage"
+
+# Scan Configuration Placeholder
+- stage: Scan
+  condition: false
+  jobs:
+    - job: LicenseScan
+      steps:
+        - script: echo "License Scan Stage"
