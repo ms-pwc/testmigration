@@ -98,7 +98,7 @@ resources:
       ref: refs/heads/main
 
 extends:
-  template: pipelines/pipeline-v3.0.yaml@library
+  template: pipelines/pipeline-v3.0.yaml
   parameters:
     cdStages: ${{ parameters.cdStages }}
     variables:
