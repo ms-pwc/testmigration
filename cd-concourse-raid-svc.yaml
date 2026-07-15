@@ -1,0 +1,22 @@
+trigger: none
+pr: none
+parameters:
+  - name: VERSION
+    type: string
+pool:
+  name: 'dds-concourse-ubuntu2004-01'
+  workspace:
+    clean: all
+resources:
+  repositories:
+    - repository: CommonTemplates
+      type: github
+      endpoint: concourse-core-automation_pwcit
+      name: pwc-us-adv-tech-enablement/tech-enablement-devops
+      ref: refs/heads/main
+extends:
+  template: pipelines/backend/monorepo-cd.yaml@CommonTemplates
+  parameters:
+    appId: concourse-raid-svc
+    appVersion: ${{ parameters.VERSION }}
+    agentPool: 'dds-concourse-ubuntu2004-01'

@@ -1,0 +1,186 @@
+---
+name: "${{ parameters.ENVIRONMENT }}-${{ parameters.SERVICE_NAME }}"
+
+parameters:
+  - name: ENVIRONMENT
+    displayName: ENVIRONMENT
+    type: string
+    default: us-dev
+    values:
+      - us-dev
+      - us-qa
+      - us-perf
+      - us-int
+      - us-stage
+      - us-prod
+      - us-prod-dr
+      - emea-stage
+      - emea-prod
+      - emea-prod-dr
+      - apac-stage
+      - apac-prod
+      - apac-prod-dr
+
+  - name: SERVICE_NAME
+    type: string
+    default: "concourse-api"
+    values:
+      - concourse-api
+      - concourse-raid-svc
+      - atlas-admin-ui
+      - concourse-redis
+
+  - name: APP_VERSION
+    type: string
+    default: "R1.31-20220718.29"
+
+  - name: RE_DEPLOY
+    type: boolean
+    default: false
+
+variables:
+  - group: "ConcourseCore"
+  - group: ${{ parameters.ENVIRONMENT }}
+  - name: "ENVIRONMENT"
+    value: ${{ parameters.ENVIRONMENT }}
+  - name: SERVICE_NAME
+    value: ${{ parameters.SERVICE_NAME }}
+  - name: APP_VERSION
+    value: ${{ parameters.APP_VERSION }}
+  - name: ver
+    value: ${{ parameters.APP_VERSION }}
+  - name: K8S_CONFIGMAP_NAME
+    value: "${{ parameters.SERVICE_NAME }}"
+  - name: K8S_DEPLOYMENT_YAML
+    value: "k8s/${{parameters.SERVICE_NAME}}/deployment.yaml"
+  - name: K8S_CONFIGMAP_YAML
+    value: "k8s/${{parameters.SERVICE_NAME}}/configs/${{parameters.ENVIRONMENT}}/${{parameters.SERVICE_NAME}}.configmap.yaml"
+  - name: REPLICAS
+    value: 1
+trigger: none
+pr:
+  branches:
+    include:
+      - noTrigger
+
+pool:
+  name: "dds-concourse-ubuntu2004-01"
+
+  workspace:
+    clean: all
+resources:
+  repositories:
+    - repository: AzureTemplates # In a different organization
+      type: git
+      name: InfraDevOps/ado-templates
+      ref: refs/heads/master
+stages:
+  - stage: deploy
+    variables:
+      - group: ${{ parameters.ENVIRONMENT }}
+    jobs:
+      - deployment: "deploy"
+        workspace:
+          clean: all
+        environment: $(ENVIRONMENT)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - script: echo "##vso[build.updatebuildnumber]${{ parameters.ENVIRONMENT }} - $(Build.SourceBranchName) - ${{ parameters.APP_VERSION }}"
+                  displayName: Show runtime Parameters
+
+                - script: |
+                    sed -Ei "s|busybox|$(ARTIFACTORY_DOCKER_REPO).$(ARTIFACTORY_HOST)/$(ARTIFACTORY_DOCKER_REPO_PATH)/$(SERVICE_NAME):$(APP_VERSION)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|\{imageName\}|$(ARTIFACTORY_DOCKER_REPO).$(ARTIFACTORY_HOST)/$(ARTIFACTORY_DOCKER_REPO_PATH)/$(SERVICE_NAME):$(APP_VERSION)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|\#\{DEPLOY_IMAGE_TAG\}\#|$(ARTIFACTORY_DOCKER_REPO).$(ARTIFACTORY_HOST)/$(ARTIFACTORY_DOCKER_REPO_PATH)/$(SERVICE_NAME):$(APP_VERSION)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|AppNameLabel|$(SERVICE_NAME)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|DeploymentName|$(SERVICE_NAME)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|ContainerPort|$(CONTAINER_PORT)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|key-vault-object-names-placeholder|$(SECRETS_KEY_VAULT_OBJECT_NAMES)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|key-vault-object-aliases-placeholder|$(SECRETS_KEY_VAULT_OBJECT_ALIASES)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|key-vault-object-types-placeholder|$(SECRETS_KEY_VAULT_OBJECT_TYPES)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|tags.datadoghq.com/env: dev|tags.datadoghq.com/env: ${ENVIRONMENT}|g" "${K8S_DEPLOYMENT_YAML}"
+                    sed -Ei "s|\{AppVersion\}|$(APP_VERSION)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    sed -Ei "s|APP_VERSION_PLACEHOLDER|$(APP_VERSION)|g" "$(K8S_DEPLOYMENT_YAML)"
+                    unset ALL_PROXY
+                    unset all_proxy
+                    unset http_proxy
+                    unset https_proxy
+                    echo "get IP"
+                    IP=`curl ifconfig.me`
+                    echo ${IP}
+                  displayName: Update placeholders in Manifests
+
+                - task: qetza.replacetokens.replacetokens-task.replacetokens@3
+                  displayName: Replace Tokens
+                  inputs:
+                    targetFiles: |
+                      $(K8S_DEPLOYMENT_YAML)
+                      $(K8S_CONFIGMAP_YAML)
+                    encoding: "auto"
+                    tokenPattern: "custom"
+                    tokenPrefix: "<{"
+                    tokenSuffix: "}>"
+                    writeBOM: true
+                    actionOnMissing: "warn"
+                    keepToken: false
+                    actionOnNoFiles: "continue"
+                    enableTransforms: false
+                    enableRecursion: false
+                    useLegacyPattern: false
+                    enableTelemetry: true
+                    defaultValue: "defaultValue"
+                    verbosity: detailed
+
+                - task: KubernetesManifest@0
+                  displayName: Create Service
+                  inputs:
+                    kubernetesServiceConnection: $(K8S_SERVICE_CONNECTION)
+                    namespace: $(K8S_NAMESPACE)
+                    action: deploy
+                    manifests: k8s/$(SERVICE_NAME)/$(SERVICE_NAME)-service.yaml
+
+                - task: KubernetesManifest@0
+                  displayName: Create Configmap
+                  inputs:
+                    kubernetesServiceConnection: $(K8S_SERVICE_CONNECTION)
+                    namespace: $(K8S_NAMESPACE)
+                    action: deploy
+                    manifests: $(K8S_CONFIGMAP_YAML)
+
+                - task: Kubernetes@1
+                  displayName: Get Current Image Version
+                  name: currentImage
+                  inputs:
+                    kubernetesServiceEndpoint: $(K8S_SERVICE_CONNECTION)
+                    namespace: $(K8S_NAMESPACE)
+                    command: get
+                    arguments: deploy $(SERVICE_NAME)
+                    outputFormat: "jsonpath='{..image}'"
+
+                - bash: |
+                    image=$(echo $(currentImage.KubectlOutput) | rev | cut -d '/'  -f 1 | rev)
+                    version=$(echo $image | rev | cut -d ':' -f 1 | rev)
+                    echo "##vso[task.setvariable variable=CURRENT_IMAGE]$version"
+                  displayName: "Set Current Image Varible"
+
+                - task: KubernetesManifest@0
+                  displayName: Create Deployment
+                  inputs:
+                    kubernetesServiceConnection: $(K8S_SERVICE_CONNECTION)
+                    namespace: $(K8S_NAMESPACE)
+                    action: deploy
+                    manifests: $(K8S_DEPLOYMENT_YAML)
+                  condition: or(not(eq(variables.CURRENT_IMAGE, '${{parameters.APP_VERSION}}')), eq('${{parameters.RE_DEPLOY}}', true))
+
+                - task: Kubernetes@1
+                  displayName: Restart Pods
+                  inputs:
+                    kubernetesServiceEndpoint: $(K8S_SERVICE_CONNECTION)
+                    namespace: $(K8S_NAMESPACE)
+                    command: delete
+                    arguments: po -l app=$(SERVICE_NAME)
+                  condition: eq(variables.CURRENT_IMAGE, '${{parameters.APP_VERSION}}')
