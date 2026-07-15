@@ -7,15 +7,8 @@ pool:
   name: 'dds-concourse-ubuntu2004-01'
   workspace:
     clean: all
-resources:
-  repositories:
-    - repository: CommonTemplates
-      type: github
-      endpoint: concourse-core-automation_pwcit
-      name: ms-pwc/tech-enablement-devops
-      ref: refs/heads/main
 extends:
-  template: pipelines/backend/monorepo-cd.yaml@CommonTemplates
+  template: pipelines/backend/monorepo-cd.yaml
   parameters:
     appId: concourse-raid-svc
     appVersion: ${{ parameters.VERSION }}
