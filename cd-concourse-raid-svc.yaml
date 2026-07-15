@@ -12,7 +12,7 @@ resources:
     - repository: CommonTemplates
       type: github
       endpoint: concourse-core-automation_pwcit
-      name: pwc-us-adv-tech-enablement/tech-enablement-devops
+      name: ms-pwc/tech-enablement-devops
       ref: refs/heads/main
 extends:
   template: pipelines/backend/monorepo-cd.yaml@CommonTemplates
